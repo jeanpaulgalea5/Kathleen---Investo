@@ -1065,7 +1065,7 @@ def main() -> int:
     )
 
     if SEND_VALUATION_EMAIL:
-        subject = f"Investo -Live - Valuation Report – {_now_str()}"
+        subject = f"Kathleen Investo -Live - Valuation Report – {_now_str()}"
         send_email(
             subject,
             html_email,
