@@ -1,0 +1,28 @@
+{
+  "ticker": "PRY.MI",
+  "best": "S8_DI_GUARD",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0,
+    "silver_require_bullish_di": true
+  },
+  "cums": {
+    "S0_BASE": 177.39,
+    "S1_FAST": 212.41,
+    "S2_HOLD12": 159.96,
+    "S3_HOLD16": 113.36,
+    "S4_WIDEATR": 260.55,
+    "S5_COMBO": 228.8,
+    "S6_TIGHT": 172.49,
+    "S2_HOLD12_BUF": 135.54,
+    "S3_HOLD16_BUF": 126.39,
+    "S5_COMBO_BUF": 265.88,
+    "S8_DI_GUARD": 280.29,
+    "S8_DI_GUARD_BUF": 182.94,
+    "S11_VOLATILE_FAST": 221.66,
+    "S12_RECOVERY": 103.57
+  },
+  "recent_cum_3y": null,
+  "recent_override": null,
+  "computed": "2026-03-30T16:55:17"
+}

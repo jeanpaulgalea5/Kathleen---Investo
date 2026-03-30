@@ -1,0 +1,28 @@
+{
+  "ticker": "AMD",
+  "best": "S5_COMBO",
+  "params": {
+    "golden_min_weeks_on": 12,
+    "golden_trailing_atr_mult": 2.0,
+    "golden_ma_break_confirm_weeks": 2
+  },
+  "cums": {
+    "S0_BASE": 1374.2,
+    "S1_FAST": 654.28,
+    "S2_HOLD12": 4842.62,
+    "S3_HOLD16": 5091.05,
+    "S4_WIDEATR": 1475.41,
+    "S5_COMBO": 5862.1,
+    "S6_TIGHT": 768.4,
+    "S2_HOLD12_BUF": 4213.98,
+    "S3_HOLD16_BUF": 4230.59,
+    "S5_COMBO_BUF": 5205.58,
+    "S8_DI_GUARD": 662.71,
+    "S8_DI_GUARD_BUF": 2126.31,
+    "S11_VOLATILE_FAST": 649.18,
+    "S12_RECOVERY": 1860.31
+  },
+  "recent_cum_3y": null,
+  "recent_override": null,
+  "computed": "2026-03-30T16:54:49"
+}
