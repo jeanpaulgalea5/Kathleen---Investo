@@ -1,0 +1,23 @@
+{
+  "ticker": "TEP.PA",
+  "best": "S1_FAST",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0
+  },
+  "cums": {
+    "S0_BASE": 227.05,
+    "S1_FAST": 127.92,
+    "S2_HOLD12": 257.41,
+    "S3_HOLD16": 251.79,
+    "S4_WIDEATR": 351.78,
+    "S5_COMBO": 251.52,
+    "S6_TIGHT": 109.98,
+    "S2_HOLD12_BUF": 290.7,
+    "S3_HOLD16_BUF": 271.74,
+    "S5_COMBO_BUF": 236.4
+  },
+  "recent_cum_3y": -37.03,
+  "recent_override": "S1_FAST",
+  "computed": "2026-03-29T12:33:46"
+}

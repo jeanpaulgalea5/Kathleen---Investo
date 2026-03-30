@@ -1,0 +1,21 @@
+{
+  "generated_at_local": "28/03/2026 06:15:31",
+  "watchlist_csv": "watchlist.csv",
+  "holdings_xlsx": "Investments.xlsx",
+  "holdings_sheet": "Transactions",
+  "data_dir": "data",
+  "start": "2010-01-01",
+  "end": "2026-03-29",
+  "tickers_processed": 67,
+  "current_holdings_rows": 8,
+  "held_watchlist_positions": 3,
+  "buy_count": 0,
+  "blocked_count": 1,
+  "watch_count": 7,
+  "wait_count": 53,
+  "exit_now_count": 1,
+  "git_sha": "6037204fb668",
+  "reconciliation_rows": 67,
+  "reconciliation_ok": 64,
+  "reconciliation_mismatch": 2
+}

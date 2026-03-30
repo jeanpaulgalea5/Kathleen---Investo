@@ -1,0 +1,106 @@
+name: Test only-Prefetch + Backtest report
+#does not update any files
+
+on:
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: investo-manual-backtest
+  cancel-in-progress: true
+
+jobs:
+  backtest_refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install openpyxl
+
+      - name: Prepare folders
+        run: |
+          mkdir -p data/raw/daily
+          mkdir -p data/raw/weekly
+          mkdir -p data/_prefetch_reports
+          mkdir -p data/strategy_cache
+          mkdir -p reports/latest
+
+      - name: Check strategy cache
+        run: |
+          echo "=== strategy_cache files ==="
+          ls -la data/strategy_cache/ || echo "Cache empty — will compute on first run"
+
+      - name: Check required files
+        run: |
+          echo "=== root files ==="
+          ls -la
+          echo "=== watchlist ==="
+          ls -la watchlist.csv
+          echo "=== scripts ==="
+          ls -la scripts || true
+
+      - name: Prefetch / refresh data (daily + weekly)
+        run: |
+          python scripts/prefetch_data.py \
+            --watchlist watchlist.csv \
+            --start 2010-01-01 \
+            --end $(date +%F) \
+            --data-dir data \
+            --pause-seconds 0.40 \
+            --max-failures 12
+
+      - name: Debug prefetch outputs
+        run: |
+          echo "=== data/raw/daily ==="
+          ls -la data/raw/daily | head -120 || true
+          echo "=== data/raw/weekly ==="
+          ls -la data/raw/weekly | head -120 || true
+          echo "=== prefetch summary ==="
+          cat data/_prefetch_reports/prefetch_summary.json || true
+          echo "=== prefetch failures ==="
+          cat data/_prefetch_reports/prefetch_failures.csv || true
+
+      - name: Run consolidated backtest report
+        run: |
+          echo "Running report: start=2010-01-01 end=$(date +%F)"
+          python -m jpbuy2.cli report \
+            --watchlist watchlist.csv \
+            --start 2010-01-01 \
+            --end $(date +%F) \
+            --data-dir data \
+            --out-dir reports/latest
+
+      - name: Debug report outputs
+        run: |
+          echo "=== reports/latest ==="
+          ls -la reports/latest || true
+          echo "----"
+          find reports/latest -maxdepth 2 -type f -print || true
+
+      - name: Upload backtest reports as artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: investo-backtest-report
+          path: |
+            data/_prefetch_reports
+            reports/latest
+          if-no-files-found: error

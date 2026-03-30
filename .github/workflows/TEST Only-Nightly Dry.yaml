@@ -1,0 +1,367 @@
+name: TEST Only-Nightly Dry Run No Archive Files touched
+
+on:
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONUNBUFFERED: "1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: investo-live-dryrun
+  cancel-in-progress: true
+
+jobs:
+  nightly_dryrun:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install openpyxl
+
+      - name: Prepare folders
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p data/raw/daily
+          mkdir -p data/raw/weekly
+          mkdir -p data/_prefetch_reports
+          mkdir -p reports/latest
+          mkdir -p reports/archive
+          mkdir -p reports/latest/daily_dashboard
+          mkdir -p reports/archive/daily_dashboard
+          mkdir -p reports/latest/etf_entry
+          mkdir -p reports/archive/etf_entry
+          mkdir -p reports/archive/backtest
+
+      - name: Check required files
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "=== root files ==="
+          ls -la
+          echo "=== watchlist ==="
+          ls -la watchlist.csv
+          echo "=== holdings workbook ==="
+          ls -la Investments.xlsx
+          echo "=== scripts ==="
+          ls -la scripts || true
+
+      - name: Resolve end date (exclusive)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          END_EXCLUSIVE=$(python - <<'PY'
+          from datetime import datetime, timedelta, timezone
+          print((datetime.now(timezone.utc).date() + timedelta(days=1)).isoformat())
+          PY
+          )
+          echo "END_EXCLUSIVE=${END_EXCLUSIVE}" >> "$GITHUB_ENV"
+          echo "Using exclusive end date: ${END_EXCLUSIVE}"
+
+      - name: Prefetch / refresh data (daily + weekly)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python scripts/prefetch_data.py \
+            --watchlist watchlist.csv \
+            --start 2010-01-01 \
+            --end "${END_EXCLUSIVE}" \
+            --data-dir data \
+            --pause-seconds 0.40 \
+            --max-failures 12
+
+      - name: Debug - list refreshed data files
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "=== data/raw/daily ==="
+          ls -la data/raw/daily | head -120 || true
+          echo "=== data/raw/weekly ==="
+          ls -la data/raw/weekly | head -120 || true
+          echo "=== prefetch summary ==="
+          cat data/_prefetch_reports/prefetch_summary.json || true
+          echo "=== prefetch failures ==="
+          cat data/_prefetch_reports/prefetch_failures.csv || true
+
+      - name: Run ETF entry optimiser
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python scripts/run_etf_entry_optimizer.py \
+            --watchlist watchlist.csv \
+            --data-dir data/raw \
+            --out-dir reports/latest/etf_entry
+
+      - name: Validate ETF outputs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -f reports/latest/etf_entry/etf_entry_latest.csv
+          test -f reports/latest/etf_entry/etf_entry_summary.csv
+          test -f reports/latest/etf_entry/etf_entry_windows.csv
+          test -f reports/latest/etf_entry/etf_entry_history.csv
+
+          python - <<'PY'
+          import pandas as pd
+
+          latest = pd.read_csv("reports/latest/etf_entry/etf_entry_latest.csv")
+          windows = pd.read_csv("reports/latest/etf_entry/etf_entry_windows.csv")
+
+          wl = pd.read_csv("watchlist.csv")
+          wl.columns = [str(c).strip().lower() for c in wl.columns]
+
+          if "ticker" not in wl.columns and "symbol" in wl.columns:
+              wl["ticker"] = wl["symbol"]
+
+          if "category" not in wl.columns and "type" in wl.columns:
+              wl["category"] = wl["type"]
+
+          wl["ticker"] = wl["ticker"].astype(str).str.strip().str.upper()
+          wl["category"] = wl["category"].astype(str).str.strip().str.upper()
+
+          etfs = set(wl.loc[wl["category"] == "ETF", "ticker"])
+
+          for fname, df in [("latest", latest), ("windows", windows)]:
+              if "ticker" not in df.columns:
+                  raise SystemExit(f"{fname} output missing ticker column")
+              bad = sorted(set(df["ticker"].astype(str).str.strip().str.upper()) - etfs)
+              if bad:
+                  raise SystemExit(f"Non-ETF tickers found in ETF output ({fname}): {bad}")
+
+          print("ETF output validation passed.")
+          PY
+
+      - name: Build ETF report (dry-run only, no archive writes)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          from datetime import datetime, timezone
+
+          latest_dir = Path("reports/latest/etf_entry")
+          summary_csv = latest_dir / "etf_entry_summary.csv"
+          latest_csv = latest_dir / "etf_entry_latest.csv"
+          history_csv = latest_dir / "etf_entry_history.csv"
+          windows_csv = latest_dir / "etf_entry_windows.csv"
+          profiles_csv = latest_dir / "etf_entry_profiles.csv"
+          report_md = latest_dir / "etf_entry_report.md"
+
+          def safe_read(path: Path) -> pd.DataFrame:
+              if not path.exists():
+                  return pd.DataFrame()
+              return pd.read_csv(path)
+
+          def round_if_number(x, digits=4):
+              try:
+                  if pd.isna(x):
+                      return ""
+                  return round(float(x), digits)
+              except Exception:
+                  return str(x)
+
+          def md_table(df: pd.DataFrame) -> str:
+              if df.empty:
+                  return "_No rows_"
+              cols = [str(c) for c in df.columns]
+              rows = []
+              rows.append("| " + " | ".join(cols) + " |")
+              rows.append("| " + " | ".join(["---"] * len(cols)) + " |")
+              for _, row in df.iterrows():
+                  vals = []
+                  for c in cols:
+                      v = row[c]
+                      if pd.isna(v):
+                          vals.append("")
+                      else:
+                          vals.append(str(v).replace("\n", " ").replace("|", "\\|"))
+                  rows.append("| " + " | ".join(vals) + " |")
+              return "\n".join(rows)
+
+          summary = safe_read(summary_csv)
+          latest = safe_read(latest_csv)
+          history = safe_read(history_csv)
+
+          ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+          lines = []
+          lines.append("# ETF Entry Report")
+          lines.append("")
+          lines.append(f"Generated: {ts}")
+          lines.append("")
+
+          lines.append("## Primed Alerts")
+          lines.append("")
+          lines.append("> ETFs where the drawdown gate is already satisfied and MACD is improving.")
+          lines.append("> A BUY signal may fire on the next bar. Have capital ready.")
+          lines.append("")
+          if latest.empty:
+              lines.append("_No data._")
+          else:
+              primed_rows = latest[latest["signal"] == "PRIMED"].copy() if "signal" in latest.columns else pd.DataFrame()
+              if primed_rows.empty:
+                  lines.append("_No ETFs currently primed._")
+              else:
+                  for _, pr in primed_rows.iterrows():
+                      dd20 = round_if_number(pr.get("drawdown_20d", ""), 3)
+                      dd_th = round_if_number(pr.get("drawdown_entry_th", ""), 3)
+                      rsi = round_if_number(pr.get("rsi14", ""), 2)
+                      ox = pr.get("drawdown_overshoot_x", "")
+                      ol = pr.get("drawdown_overshoot_label", "")
+                      overshoot_str = f" | **{ox}x overshoot [{ol}]**" if ox != "" else ""
+                      lines.append(f"- **{pr['ticker']}** — dd20={dd20} vs th={dd_th}{overshoot_str} | RSI={rsi} | {pr.get('reason', '')}")
+          lines.append("")
+
+          lines.append("## Latest Signals")
+          lines.append("")
+          if latest.empty:
+              lines.append("No latest ETF signals produced.")
+          else:
+              cols = [c for c in [
+                  "ticker", "date", "signal", "close", "rsi14",
+                  "drawdown_3m", "dist_to_sma200", "weekly_macd_hist", "reason"
+              ] if c in latest.columns]
+              latest_view = latest[cols].copy()
+              for col in ["close", "rsi14", "drawdown_3m", "dist_to_sma200", "weekly_macd_hist"]:
+                  if col in latest_view.columns:
+                      latest_view[col] = latest_view[col].map(lambda x: round_if_number(x, 4))
+              lines.append(md_table(latest_view))
+          lines.append("")
+
+          lines.append("## Summary")
+          lines.append("")
+          if summary.empty:
+              lines.append("No ETF summary produced.")
+          else:
+              cols = [c for c in [
+                  "ticker", "signals", "avg_1y_return", "median_1y_return",
+                  "hit_rate", "avg_days_between"
+              ] if c in summary.columns]
+              summary_view = summary[cols].copy()
+              for col in ["avg_1y_return", "median_1y_return", "hit_rate"]:
+                  if col in summary_view.columns:
+                      summary_view[col] = summary_view[col].map(lambda x: round_if_number(x, 4))
+              if "avg_days_between" in summary_view.columns:
+                  summary_view["avg_days_between"] = summary_view["avg_days_between"].map(lambda x: round_if_number(x, 1))
+              lines.append(md_table(summary_view))
+          lines.append("")
+
+          lines.append("## Recent Selected Entry Dates")
+          lines.append("")
+          if history.empty:
+              lines.append("No historical entry rows produced.")
+          else:
+              hist = history.copy()
+              cols = [c for c in [
+                  "ticker", "date", "close", "rsi14",
+                  "drawdown_3m", "strong_buy", "fwd_1y_return"
+              ] if c in hist.columns]
+              hist = hist[cols].tail(25).copy()
+              for col in ["close", "rsi14", "drawdown_3m", "fwd_1y_return"]:
+                  if col in hist.columns:
+                      hist[col] = hist[col].map(lambda x: round_if_number(x, 4))
+              lines.append(md_table(hist))
+          lines.append("")
+
+          report_md.write_text("\n".join(lines), encoding="utf-8")
+          print(f"Wrote markdown report: {report_md}")
+
+          for p in [summary_csv, latest_csv, history_csv, windows_csv, profiles_csv, report_md]:
+              if p.exists():
+                  print(f"Verified output exists: {p}")
+          PY
+
+      - name: Run consolidated backtest report
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "Running report: start=2010-01-01 end=${END_EXCLUSIVE}"
+          python -m jpbuy2.cli report \
+            --watchlist watchlist.csv \
+            --start 2010-01-01 \
+            --end "${END_EXCLUSIVE}" \
+            --data-dir data \
+            --out-dir reports/latest
+
+      - name: Validate backtest outputs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -f reports/latest/backtest_windows.csv
+          test -f reports/latest/backtest_summary.csv
+
+      - name: Debug - list backtest outputs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "=== reports/latest after backtest ==="
+          ls -la reports/latest || true
+          echo "----"
+          find reports/latest -maxdepth 2 -type f -print || true
+
+      - name: Generate Daily dashboard
+        env:
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          SMTP_HOST: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASS }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python scripts/generate_daily_dashboard.py \
+            --watchlist watchlist.csv \
+            --holdings-xlsx Investments.xlsx \
+            --holdings-sheet Transactions \
+            --data-dir data \
+            --out-dir reports/latest/daily_dashboard \
+            --archive-dir reports/archive/daily_dashboard \
+            --start 2010-01-01 \
+            --end "${END_EXCLUSIVE}" \
+            --send-email
+
+      - name: Debug - list dashboard outputs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "=== reports/latest/daily_dashboard ==="
+          ls -la reports/latest/daily_dashboard || true
+          echo "=== reports/latest/etf_entry ==="
+          ls -la reports/latest/etf_entry || true
+          echo "=== reports/archive/daily_dashboard ==="
+          ls -la reports/archive/daily_dashboard || true
+          echo "=== latest dashboard summary ==="
+          cat reports/latest/daily_dashboard/daily_dashboard_summary.json || true
+
+      - name: Upload outputs as artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: investo-live-dryrun
+          path: |
+            data/_prefetch_reports
+            reports/latest
+          if-no-files-found: error

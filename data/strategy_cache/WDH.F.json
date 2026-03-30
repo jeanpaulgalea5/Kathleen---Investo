@@ -1,0 +1,23 @@
+{
+  "ticker": "WDH.F",
+  "best": "S1_FAST",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0
+  },
+  "cums": {
+    "S0_BASE": 3.12,
+    "S1_FAST": 1.46,
+    "S2_HOLD12": 3.12,
+    "S3_HOLD16": 3.12,
+    "S4_WIDEATR": 3.12,
+    "S5_COMBO": 3.12,
+    "S6_TIGHT": 1.46,
+    "S2_HOLD12_BUF": 6.51,
+    "S3_HOLD16_BUF": 6.51,
+    "S5_COMBO_BUF": 1.07
+  },
+  "recent_cum_3y": -16.1,
+  "recent_override": "S1_FAST",
+  "computed": "2026-03-29T12:40:52"
+}

@@ -1,0 +1,26 @@
+{
+  "ticker": "NKT.SG",
+  "best": "S5_COMBO_BUF",
+  "params": {
+    "golden_min_weeks_on": 12,
+    "golden_trailing_atr_mult": 2.0,
+    "golden_ma_break_confirm_weeks": 2,
+    "golden_rsi_entry_buffer": 30.0,
+    "golden_rsi_high_quantile": 0.92
+  },
+  "cums": {
+    "S0_BASE": 52.07,
+    "S1_FAST": 49.78,
+    "S2_HOLD12": 52.07,
+    "S3_HOLD16": 52.07,
+    "S4_WIDEATR": 77.76,
+    "S5_COMBO": 98.02,
+    "S6_TIGHT": 43.07,
+    "S2_HOLD12_BUF": 80.38,
+    "S3_HOLD16_BUF": 80.38,
+    "S5_COMBO_BUF": 119.29
+  },
+  "recent_cum_3y": 8.56,
+  "recent_override": null,
+  "computed": "2026-03-29T12:41:31"
+}

@@ -1,0 +1,22 @@
+{
+  "ticker": "ZAL.DE",
+  "best": "S4_WIDEATR",
+  "params": {
+    "golden_trailing_atr_mult": 2.2
+  },
+  "cums": {
+    "S0_BASE": 116.98,
+    "S1_FAST": 35.85,
+    "S2_HOLD12": 55.51,
+    "S3_HOLD16": 21.45,
+    "S4_WIDEATR": 211.19,
+    "S5_COMBO": 165.66,
+    "S6_TIGHT": 131.19,
+    "S2_HOLD12_BUF": 69.45,
+    "S3_HOLD16_BUF": 38.45,
+    "S5_COMBO_BUF": 161.15
+  },
+  "recent_cum_3y": null,
+  "recent_override": null,
+  "computed": "2026-03-29T12:43:19"
+}

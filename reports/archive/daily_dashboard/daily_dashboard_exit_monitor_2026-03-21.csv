@@ -1,0 +1,6 @@
+Ticker,Platform,Quantity,Currency_x,Net Cost,Price,1D %,Golden,Silver,Exit Signal,Status,Name,Currency_y,P/L %,Exit Reason,Urgency,Conflict,__status_rank
+DTE.DE,revolut,10.8059,EUR,299.00,31.62,-1.65%,OFF,NO,TRAILING_STOP,EXIT NOW,Deutsche Telekom AG,Euro,14.3%,Trailing stop broken; weekly trend off,High,,0
+EN.PA,revolut,10.0523,EUR,500.00,48.78,-0.95%,OFF,NO,TRAILING_STOP,EXIT NOW,EN,Euro,-1.9%,Trailing stop broken; weekly trend off,High,,0
+REP.MC,revolut,45.4161,EUR,995.52,24.26,-2.14%,ON,VALID,BACKTEST_END,WATCH EXIT,Repsol,Euro,10.7%,No active strategy signal,Medium,⚠ Trend vs Exit,1
+INTU,revolut,1.1086,USD,500.00,455.56,0.07%,ON,VALID,BACKTEST_END,WATCH EXIT,Intuit,USD,1.0%,No active strategy signal,Medium,⚠ Trend vs Exit,1
+ROP,revolut,1.3976,USD,500.00,353.68,0.12%,ON,VALID,BACKTEST_END,WATCH EXIT,Roper Technologies,USD,-1.1%,No active strategy signal,Medium,⚠ Trend vs Exit,1

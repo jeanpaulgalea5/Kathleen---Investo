@@ -1,0 +1,23 @@
+{
+  "ticker": "T2V1.F",
+  "best": "S1_FAST",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0
+  },
+  "cums": {
+    "S0_BASE": 44.8,
+    "S1_FAST": 34.47,
+    "S2_HOLD12": 75.63,
+    "S3_HOLD16": 78.4,
+    "S4_WIDEATR": 40.39,
+    "S5_COMBO": 45.23,
+    "S6_TIGHT": 36.09,
+    "S2_HOLD12_BUF": 133.86,
+    "S3_HOLD16_BUF": 118.72,
+    "S5_COMBO_BUF": 83.91
+  },
+  "recent_cum_3y": -12.03,
+  "recent_override": "S1_FAST",
+  "computed": "2026-03-29T12:41:57"
+}

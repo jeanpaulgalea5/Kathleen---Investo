@@ -1,0 +1,24 @@
+{
+  "ticker": "BPCR.L",
+  "best": "S5_COMBO",
+  "params": {
+    "golden_min_weeks_on": 12,
+    "golden_trailing_atr_mult": 2.0,
+    "golden_ma_break_confirm_weeks": 2
+  },
+  "cums": {
+    "S0_BASE": -22.5,
+    "S1_FAST": -23.96,
+    "S2_HOLD12": -24.89,
+    "S3_HOLD16": -23.27,
+    "S4_WIDEATR": -26.95,
+    "S5_COMBO": -16.55,
+    "S6_TIGHT": -23.7,
+    "S2_HOLD12_BUF": -28.6,
+    "S3_HOLD16_BUF": -27.37,
+    "S5_COMBO_BUF": -20.87
+  },
+  "recent_cum_3y": -2.61,
+  "recent_override": null,
+  "computed": "2026-03-29T12:44:57"
+}

@@ -1,0 +1,5 @@
+ticker,adaptive_lookback_days,drawdown_entry_quantile,rsi_support_quantile,require_bullish_day,cooldown_days,max_windows_per_year
+IQQY.DE,504,0.65,0.6,True,12,4
+VUAA.MI,504,0.65,0.6,True,12,4
+XAD5.MI,504,0.65,0.6,True,12,4
+XMEU.DE,504,0.65,0.6,True,12,4

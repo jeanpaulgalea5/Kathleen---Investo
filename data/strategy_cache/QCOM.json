@@ -1,0 +1,24 @@
+{
+  "ticker": "QCOM",
+  "best": "S5_COMBO",
+  "params": {
+    "golden_min_weeks_on": 12,
+    "golden_trailing_atr_mult": 2.0,
+    "golden_ma_break_confirm_weeks": 2
+  },
+  "cums": {
+    "S0_BASE": 173.16,
+    "S1_FAST": 163.84,
+    "S2_HOLD12": 183.78,
+    "S3_HOLD16": 250.89,
+    "S4_WIDEATR": 128.75,
+    "S5_COMBO": 191.29,
+    "S6_TIGHT": 181.33,
+    "S2_HOLD12_BUF": 241.13,
+    "S3_HOLD16_BUF": 234.62,
+    "S5_COMBO_BUF": 210.99
+  },
+  "recent_cum_3y": -24.94,
+  "recent_override": "S5_COMBO",
+  "computed": "2026-03-29T12:46:36"
+}

@@ -1,0 +1,162 @@
+name: Generate Investo Valuation Report
+
+on:
+  schedule:
+    # GitHub cron is UTC. Malta in winter = UTC+1.
+    # 05:00 UTC ≈ 06:00 Malta (winter).
+    - cron: "0 5 * * 6"
+
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONUNBUFFERED: "1"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: investo-valuation-report
+  cancel-in-progress: false
+
+jobs:
+  portfolio_report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install openpyxl
+
+      - name: Prepare output folders
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p reports/valuation_report
+          mkdir -p reports/archive/valuation
+
+      - name: Check required files
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "=== root files ==="
+          ls -la
+          echo "=== portfolio workbook ==="
+          ls -la Investments.xlsx
+          echo "=== valuation script ==="
+          ls -la portfolio_report.py
+          echo "=== output folder ==="
+          ls -la reports/valuation_report || true
+
+      - name: Generate valuation report (and email it)
+        env:
+          PORTFOLIO_XLSX: Investments.xlsx
+          PORTFOLIO_OUT_DIR: reports/valuation_report
+          SEND_VALUATION_EMAIL: "true"
+          SMTP_HOST: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASS }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python portfolio_report.py
+
+      - name: Archive valuation outputs
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          test -f reports/valuation_report/portfolio_positions.csv
+          test -f reports/valuation_report/portfolio_realised_trades.csv
+          test -f reports/valuation_report/portfolio_realised_trades_summary.csv
+          test -f reports/valuation_report/portfolio_realised_by_year.csv
+          test -f reports/valuation_report/portfolio_ytd_returns.csv
+          test -f reports/valuation_report/portfolio_report.html
+          test -f reports/valuation_report/portfolio_report_email.html
+
+          python - <<'PY'
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import shutil
+
+          latest_dir = Path("reports/valuation_report")
+          archive_root = Path("reports/archive/valuation")
+          archive_root.mkdir(parents=True, exist_ok=True)
+
+          stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+          archive_run_dir = archive_root / stamp
+          archive_run_dir.mkdir(parents=True, exist_ok=True)
+
+          for name in [
+              "portfolio_positions.csv",
+              "portfolio_realised_trades.csv",
+              "portfolio_realised_trades_summary.csv",
+              "portfolio_realised_by_year.csv",
+              "portfolio_ytd_returns.csv",
+              "portfolio_report.html",
+              "portfolio_report_email.html",
+          ]:
+              src = latest_dir / name
+              if src.exists():
+                  shutil.copy2(src, archive_run_dir / name)
+
+          print(f"Archived valuation run to: {archive_run_dir}")
+          PY
+
+      - name: Debug valuation outputs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "=== reports/valuation_report ==="
+          ls -la reports/valuation_report || true
+          echo "----"
+          find reports/valuation_report -maxdepth 2 -type f -print || true
+          echo "=== reports/archive/valuation ==="
+          find reports/archive/valuation -maxdepth 2 -type f -print || true
+
+      - name: Commit valuation outputs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add reports/valuation_report || true
+          git add reports/archive/valuation || true
+
+          if git diff --cached --quiet; then
+            echo "No valuation report changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Update valuation report [skip ci]"
+          git push origin "${GITHUB_REF_NAME:-main}"
+
+      - name: Upload valuation outputs as artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: investo-valuation-report
+          path: |
+            reports/valuation_report
+            reports/archive/valuation
+          if-no-files-found: error

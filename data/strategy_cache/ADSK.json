@@ -1,0 +1,23 @@
+{
+  "ticker": "ADSK",
+  "best": "S1_FAST",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0
+  },
+  "cums": {
+    "S0_BASE": 89.53,
+    "S1_FAST": 66.31,
+    "S2_HOLD12": 122.29,
+    "S3_HOLD16": 95.27,
+    "S4_WIDEATR": 167.41,
+    "S5_COMBO": 335.83,
+    "S6_TIGHT": 85.48,
+    "S2_HOLD12_BUF": 130.2,
+    "S3_HOLD16_BUF": 149.32,
+    "S5_COMBO_BUF": 330.81
+  },
+  "recent_cum_3y": -11.67,
+  "recent_override": "S1_FAST",
+  "computed": "2026-03-29T12:45:32"
+}

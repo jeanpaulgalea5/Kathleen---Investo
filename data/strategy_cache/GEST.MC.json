@@ -1,0 +1,22 @@
+{
+  "ticker": "GEST.MC",
+  "best": "S4_WIDEATR",
+  "params": {
+    "golden_trailing_atr_mult": 2.2
+  },
+  "cums": {
+    "S0_BASE": 37.57,
+    "S1_FAST": 10.27,
+    "S2_HOLD12": 29.24,
+    "S3_HOLD16": 29.24,
+    "S4_WIDEATR": 54.32,
+    "S5_COMBO": 25.86,
+    "S6_TIGHT": 35.34,
+    "S2_HOLD12_BUF": 26.52,
+    "S3_HOLD16_BUF": 26.52,
+    "S5_COMBO_BUF": 23.21
+  },
+  "recent_cum_3y": null,
+  "recent_override": null,
+  "computed": "2026-03-29T12:40:16"
+}

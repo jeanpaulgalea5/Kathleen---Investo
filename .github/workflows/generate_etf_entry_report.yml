@@ -1,0 +1,265 @@
+name: Generate ETF Entry Report
+
+on:
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONUNBUFFERED: "1"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: investo-etf-entry-report
+  cancel-in-progress: false
+
+jobs:
+  etf-entry-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install openpyxl
+
+      - name: Prepare report folders
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p data/raw/daily
+          mkdir -p data/raw/weekly
+          mkdir -p data/_prefetch_reports
+          mkdir -p reports/latest/etf_entry
+          mkdir -p reports/archive/etf_entry
+
+      - name: Resolve end date (exclusive)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          END_EXCLUSIVE=$(python - <<'PY'
+          from datetime import datetime, timedelta, timezone
+          print((datetime.now(timezone.utc).date() + timedelta(days=1)).isoformat())
+          PY
+          )
+          echo "END_EXCLUSIVE=${END_EXCLUSIVE}" >> "$GITHUB_ENV"
+          echo "Using exclusive end date: ${END_EXCLUSIVE}"
+
+      - name: Sanity check repo structure
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "=== repo root ==="
+          pwd
+          ls -la
+
+          echo "=== branch/ref ==="
+          git branch --show-current || true
+          echo "${GITHUB_REF:-}"
+          echo "${GITHUB_REF_NAME:-}"
+
+          echo "=== watchlist ==="
+          ls -la watchlist.csv
+          python - <<'PY'
+          import pandas as pd
+          df = pd.read_csv("watchlist.csv")
+          print(df.head(10).to_string())
+          print("\nColumns:", df.columns.tolist())
+          PY
+
+          echo "=== raw daily sample ==="
+          ls -la data/raw/daily | head -50 || true
+
+          echo "=== raw weekly sample ==="
+          ls -la data/raw/weekly | head -50 || true
+
+          echo "=== ETF runner ==="
+          ls -la scripts/run_etf_entry_optimizer.py
+
+          echo "=== ETF module ==="
+          find src/jpbuy2/etf_entry -maxdepth 2 -type f -print
+
+          echo "=== watchlist loader ==="
+          ls -la src/jpbuy2/data/watchlist_loader.py
+
+      - name: Prefetch / refresh data (daily + weekly)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python scripts/prefetch_data.py \
+            --watchlist watchlist.csv \
+            --start 2010-01-01 \
+            --end "${END_EXCLUSIVE}" \
+            --data-dir data \
+            --pause-seconds 0.40 \
+            --max-failures 12
+
+      - name: Run ETF entry optimiser
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python scripts/run_etf_entry_optimizer.py \
+            --watchlist watchlist.csv \
+            --data-dir data/raw \
+            --out-dir reports/latest/etf_entry
+
+      - name: Build markdown report
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          from datetime import datetime, timezone
+          import shutil
+
+          latest_dir = Path("reports/latest/etf_entry")
+          archive_dir = Path("reports/archive/etf_entry")
+          archive_dir.mkdir(parents=True, exist_ok=True)
+
+          summary_csv = latest_dir / "etf_entry_summary.csv"
+          latest_csv = latest_dir / "etf_entry_latest.csv"
+          history_csv = latest_dir / "etf_entry_history.csv"
+          report_md = latest_dir / "etf_entry_report.md"
+
+          def safe_read(path: Path) -> pd.DataFrame:
+              if not path.exists():
+                  return pd.DataFrame()
+              return pd.read_csv(path)
+
+          def round_if_number(x, digits=4):
+              try:
+                  if pd.isna(x):
+                      return ""
+                  return round(float(x), digits)
+              except Exception:
+                  return str(x)
+
+          def md_table(df: pd.DataFrame) -> str:
+              if df.empty:
+                  return "_No rows_"
+              cols = [str(c) for c in df.columns]
+              rows = []
+              rows.append("| " + " | ".join(cols) + " |")
+              rows.append("| " + " | ".join(["---"] * len(cols)) + " |")
+              for _, row in df.iterrows():
+                  vals = []
+                  for c in cols:
+                      v = row[c]
+                      if pd.isna(v):
+                          vals.append("")
+                      else:
+                          vals.append(str(v).replace("\n", " ").replace("|", "\\|"))
+                  rows.append("| " + " | ".join(vals) + " |")
+              return "\n".join(rows)
+
+          summary = safe_read(summary_csv)
+          latest = safe_read(latest_csv)
+          history = safe_read(history_csv)
+
+          ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+          lines = []
+          lines.append("# ETF Entry Report")
+          lines.append("")
+          lines.append(f"Generated: {ts}")
+          lines.append("")
+
+          lines.append("## Latest Signals")
+          lines.append("")
+          if latest.empty:
+              lines.append("No latest ETF signals produced.")
+          else:
+              cols = [c for c in [
+                  "ticker", "date", "signal", "close", "rsi14",
+                  "drawdown_3m", "dist_to_sma200", "weekly_macd_hist", "reason"
+              ] if c in latest.columns]
+              latest_view = latest[cols].copy()
+              for col in ["close", "rsi14", "drawdown_3m", "dist_to_sma200", "weekly_macd_hist"]:
+                  if col in latest_view.columns:
+                      latest_view[col] = latest_view[col].map(lambda x: round_if_number(x, 4))
+              lines.append(md_table(latest_view))
+          lines.append("")
+
+          lines.append("## Summary")
+          lines.append("")
+          if summary.empty:
+              lines.append("No ETF summary produced.")
+          else:
+              cols = [c for c in [
+                  "ticker", "signals", "avg_1y_return", "median_1y_return",
+                  "hit_rate", "avg_days_between"
+              ] if c in summary.columns]
+              summary_view = summary[cols].copy()
+              for col in ["avg_1y_return", "median_1y_return", "hit_rate"]:
+                  if col in summary_view.columns:
+                      summary_view[col] = summary_view[col].map(lambda x: round_if_number(x, 4))
+              if "avg_days_between" in summary_view.columns:
+                  summary_view["avg_days_between"] = summary_view["avg_days_between"].map(lambda x: round_if_number(x, 1))
+              lines.append(md_table(summary_view))
+          lines.append("")
+
+          lines.append("## Recent Selected Entry Dates")
+          lines.append("")
+          if history.empty:
+              lines.append("No historical entry rows produced.")
+          else:
+              hist = history.copy()
+              cols = [c for c in [
+                  "ticker", "date", "close", "rsi14",
+                  "drawdown_3m", "strong_buy", "fwd_1y_return"
+              ] if c in hist.columns]
+              hist = hist[cols].tail(25).copy()
+              for col in ["close", "rsi14", "drawdown_3m", "fwd_1y_return"]:
+                  if col in hist.columns:
+                      hist[col] = hist[col].map(lambda x: round_if_number(x, 4))
+              lines.append(md_table(hist))
+          lines.append("")
+
+          report_md.write_text("\n".join(lines), encoding="utf-8")
+
+          stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+          archive_run_dir = archive_dir / stamp
+          archive_run_dir.mkdir(parents=True, exist_ok=True)
+
+          for p in [summary_csv, latest_csv, history_csv, report_md]:
+              if p.exists():
+                  shutil.copy2(p, archive_run_dir / p.name)
+
+          print(f"Wrote markdown report: {report_md}")
+          print(f"Archived run to: {archive_run_dir}")
+          PY
+
+      - name: Commit report outputs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add data/raw/daily data/raw/weekly data/_prefetch_reports || true
+          git add reports/latest/etf_entry reports/archive/etf_entry || true
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Update ETF entry report [skip ci]"
+          git push origin main

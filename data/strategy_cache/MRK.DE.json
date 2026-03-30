@@ -1,0 +1,23 @@
+{
+  "ticker": "MRK.DE",
+  "best": "S1_FAST",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0
+  },
+  "cums": {
+    "S0_BASE": 362.96,
+    "S1_FAST": 270.59,
+    "S2_HOLD12": 350.81,
+    "S3_HOLD16": 371.65,
+    "S4_WIDEATR": 404.97,
+    "S5_COMBO": 334.36,
+    "S6_TIGHT": 313.26,
+    "S2_HOLD12_BUF": 314.93,
+    "S3_HOLD16_BUF": 334.11,
+    "S5_COMBO_BUF": 342.23
+  },
+  "recent_cum_3y": -20.73,
+  "recent_override": "S1_FAST",
+  "computed": "2026-03-29T12:36:22"
+}

@@ -1,0 +1,23 @@
+{
+  "ticker": "NOV.DE",
+  "best": "S1_FAST",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0
+  },
+  "cums": {
+    "S0_BASE": 66.13,
+    "S1_FAST": 99.51,
+    "S2_HOLD12": 99.29,
+    "S3_HOLD16": 80.62,
+    "S4_WIDEATR": 136.2,
+    "S5_COMBO": 285.45,
+    "S6_TIGHT": 90.12,
+    "S2_HOLD12_BUF": 88.26,
+    "S3_HOLD16_BUF": 74.59,
+    "S5_COMBO_BUF": 267.19
+  },
+  "recent_cum_3y": -30.35,
+  "recent_override": "S1_FAST",
+  "computed": "2026-03-29T12:41:27"
+}

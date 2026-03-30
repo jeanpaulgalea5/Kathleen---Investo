@@ -1,0 +1,20 @@
+{
+  "ticker": "MONY.L",
+  "best": "S0_BASE",
+  "params": {},
+  "cums": {
+    "S0_BASE": -1.44,
+    "S1_FAST": -15.21,
+    "S2_HOLD12": -11.67,
+    "S3_HOLD16": -15.61,
+    "S4_WIDEATR": 4.8,
+    "S5_COMBO": 15.68,
+    "S6_TIGHT": -28.06,
+    "S2_HOLD12_BUF": -34.76,
+    "S3_HOLD16_BUF": -33.24,
+    "S5_COMBO_BUF": -17.68
+  },
+  "recent_cum_3y": -20.07,
+  "recent_override": "S0_BASE",
+  "computed": "2026-03-29T12:44:09"
+}

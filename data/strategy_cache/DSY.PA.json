@@ -1,0 +1,23 @@
+{
+  "ticker": "DSY.PA",
+  "best": "S1_FAST",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0
+  },
+  "cums": {
+    "S0_BASE": 98.52,
+    "S1_FAST": 96.2,
+    "S2_HOLD12": 88.95,
+    "S3_HOLD16": 159.95,
+    "S4_WIDEATR": 109.02,
+    "S5_COMBO": 85.42,
+    "S6_TIGHT": 96.2,
+    "S2_HOLD12_BUF": 114.19,
+    "S3_HOLD16_BUF": 150.0,
+    "S5_COMBO_BUF": 110.56
+  },
+  "recent_cum_3y": -18.97,
+  "recent_override": "S1_FAST",
+  "computed": "2026-03-29T12:34:15"
+}

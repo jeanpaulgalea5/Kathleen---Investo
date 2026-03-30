@@ -1,0 +1,26 @@
+{
+  "ticker": "DIA.MI",
+  "best": "S5_COMBO_BUF",
+  "params": {
+    "golden_min_weeks_on": 12,
+    "golden_trailing_atr_mult": 2.0,
+    "golden_ma_break_confirm_weeks": 2,
+    "golden_rsi_entry_buffer": 30.0,
+    "golden_rsi_high_quantile": 0.92
+  },
+  "cums": {
+    "S0_BASE": 90.38,
+    "S1_FAST": 28.99,
+    "S2_HOLD12": 85.87,
+    "S3_HOLD16": 72.03,
+    "S4_WIDEATR": 102.58,
+    "S5_COMBO": 80.46,
+    "S6_TIGHT": 30.37,
+    "S2_HOLD12_BUF": 74.77,
+    "S3_HOLD16_BUF": 77.67,
+    "S5_COMBO_BUF": 114.34
+  },
+  "recent_cum_3y": -6.75,
+  "recent_override": null,
+  "computed": "2026-03-29T12:38:43"
+}

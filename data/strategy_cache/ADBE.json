@@ -1,0 +1,20 @@
+{
+  "ticker": "ADBE",
+  "best": "S0_BASE",
+  "params": {},
+  "cums": {
+    "S0_BASE": 242.92,
+    "S1_FAST": 236.81,
+    "S2_HOLD12": 242.92,
+    "S3_HOLD16": 322.09,
+    "S4_WIDEATR": 352.61,
+    "S5_COMBO": 397.02,
+    "S6_TIGHT": 243.14,
+    "S2_HOLD12_BUF": 344.92,
+    "S3_HOLD16_BUF": 429.21,
+    "S5_COMBO_BUF": 626.67
+  },
+  "recent_cum_3y": -32.07,
+  "recent_override": "S0_BASE",
+  "computed": "2026-03-29T12:45:14"
+}

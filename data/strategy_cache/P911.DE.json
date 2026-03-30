@@ -1,0 +1,24 @@
+{
+  "ticker": "P911.DE",
+  "best": "S5_COMBO",
+  "params": {
+    "golden_min_weeks_on": 12,
+    "golden_trailing_atr_mult": 2.0,
+    "golden_ma_break_confirm_weeks": 2
+  },
+  "cums": {
+    "S0_BASE": -47.2,
+    "S1_FAST": -46.0,
+    "S2_HOLD12": -47.2,
+    "S3_HOLD16": -47.2,
+    "S4_WIDEATR": -47.2,
+    "S5_COMBO": -42.32,
+    "S6_TIGHT": -46.0,
+    "S2_HOLD12_BUF": -47.2,
+    "S3_HOLD16_BUF": -47.2,
+    "S5_COMBO_BUF": -42.32
+  },
+  "recent_cum_3y": -27.51,
+  "recent_override": null,
+  "computed": "2026-03-29T12:36:02"
+}

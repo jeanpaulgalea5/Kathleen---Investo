@@ -1,0 +1,23 @@
+{
+  "ticker": "BC8.DE",
+  "best": "S1_FAST",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0
+  },
+  "cums": {
+    "S0_BASE": 471.84,
+    "S1_FAST": 531.43,
+    "S2_HOLD12": 436.58,
+    "S3_HOLD16": 305.82,
+    "S4_WIDEATR": 337.83,
+    "S5_COMBO": 321.26,
+    "S6_TIGHT": 384.44,
+    "S2_HOLD12_BUF": 266.11,
+    "S3_HOLD16_BUF": 231.46,
+    "S5_COMBO_BUF": 222.23
+  },
+  "recent_cum_3y": 21.1,
+  "recent_override": null,
+  "computed": "2026-03-29T12:36:53"
+}

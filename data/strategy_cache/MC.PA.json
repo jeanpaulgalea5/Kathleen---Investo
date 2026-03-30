@@ -1,0 +1,25 @@
+{
+  "ticker": "MC.PA",
+  "best": "S2_HOLD12_BUF",
+  "params": {
+    "golden_min_weeks_on": 12,
+    "golden_trailing_atr_mult": 1.4,
+    "golden_rsi_entry_buffer": 30.0,
+    "golden_rsi_high_quantile": 0.92
+  },
+  "cums": {
+    "S0_BASE": 322.26,
+    "S1_FAST": 308.66,
+    "S2_HOLD12": 346.47,
+    "S3_HOLD16": 290.66,
+    "S4_WIDEATR": 163.6,
+    "S5_COMBO": 209.4,
+    "S6_TIGHT": 300.1,
+    "S2_HOLD12_BUF": 352.19,
+    "S3_HOLD16_BUF": 282.19,
+    "S5_COMBO_BUF": 168.4
+  },
+  "recent_cum_3y": null,
+  "recent_override": null,
+  "computed": "2026-03-29T12:35:06"
+}

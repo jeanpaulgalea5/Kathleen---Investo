@@ -1,0 +1,23 @@
+{
+  "ticker": "HYQ.DE",
+  "best": "S1_FAST",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0
+  },
+  "cums": {
+    "S0_BASE": 673.39,
+    "S1_FAST": 599.95,
+    "S2_HOLD12": 664.86,
+    "S3_HOLD16": 744.54,
+    "S4_WIDEATR": 713.51,
+    "S5_COMBO": 566.11,
+    "S6_TIGHT": 830.17,
+    "S2_HOLD12_BUF": 826.27,
+    "S3_HOLD16_BUF": 605.17,
+    "S5_COMBO_BUF": 1185.34
+  },
+  "recent_cum_3y": -51.43,
+  "recent_override": "S1_FAST",
+  "computed": "2026-03-29T12:43:09"
+}

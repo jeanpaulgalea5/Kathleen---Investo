@@ -1,0 +1,24 @@
+{
+  "ticker": "AC.PA",
+  "best": "S6_TIGHT",
+  "params": {
+    "golden_min_weeks_on": 6,
+    "golden_trailing_atr_mult": 1.0,
+    "golden_hard_stop_from_entry_pct": 0.07
+  },
+  "cums": {
+    "S0_BASE": 83.67,
+    "S1_FAST": 91.63,
+    "S2_HOLD12": 64.22,
+    "S3_HOLD16": 52.75,
+    "S4_WIDEATR": 76.31,
+    "S5_COMBO": 61.83,
+    "S6_TIGHT": 97.09,
+    "S2_HOLD12_BUF": 65.23,
+    "S3_HOLD16_BUF": 75.35,
+    "S5_COMBO_BUF": 73.88
+  },
+  "recent_cum_3y": -6.59,
+  "recent_override": null,
+  "computed": "2026-03-29T12:35:39"
+}

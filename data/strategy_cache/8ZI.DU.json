@@ -1,0 +1,24 @@
+{
+  "ticker": "8ZI.DU",
+  "best": "S6_TIGHT",
+  "params": {
+    "golden_min_weeks_on": 6,
+    "golden_trailing_atr_mult": 1.0,
+    "golden_hard_stop_from_entry_pct": 0.07
+  },
+  "cums": {
+    "S0_BASE": -41.4,
+    "S1_FAST": -41.39,
+    "S2_HOLD12": -40.07,
+    "S3_HOLD16": -40.07,
+    "S4_WIDEATR": -42.72,
+    "S5_COMBO": -42.0,
+    "S6_TIGHT": -43.7,
+    "S2_HOLD12_BUF": -40.07,
+    "S3_HOLD16_BUF": -40.07,
+    "S5_COMBO_BUF": -40.67
+  },
+  "recent_cum_3y": -33.56,
+  "recent_override": "S6_TIGHT",
+  "computed": "2026-03-29T12:42:03"
+}

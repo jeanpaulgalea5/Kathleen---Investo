@@ -1,0 +1,26 @@
+{
+  "ticker": "CAH",
+  "best": "S5_COMBO_BUF",
+  "params": {
+    "golden_min_weeks_on": 12,
+    "golden_trailing_atr_mult": 2.0,
+    "golden_ma_break_confirm_weeks": 2,
+    "golden_rsi_entry_buffer": 30.0,
+    "golden_rsi_high_quantile": 0.92
+  },
+  "cums": {
+    "S0_BASE": 28.63,
+    "S1_FAST": 55.32,
+    "S2_HOLD12": 28.46,
+    "S3_HOLD16": 31.71,
+    "S4_WIDEATR": 13.7,
+    "S5_COMBO": 52.08,
+    "S6_TIGHT": 40.87,
+    "S2_HOLD12_BUF": 47.38,
+    "S3_HOLD16_BUF": 40.58,
+    "S5_COMBO_BUF": 61.73
+  },
+  "recent_cum_3y": null,
+  "recent_override": null,
+  "computed": "2026-03-29T12:46:21"
+}
