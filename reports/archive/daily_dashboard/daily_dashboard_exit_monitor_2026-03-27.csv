@@ -1,7 +1,0 @@
-Ticker,Platform,Quantity,Currency_x,Net Cost,Price,1D %,Golden,Silver,Exit Signal,Status,Name,Currency_y,P/L %,Exit Reason,Urgency,Conflict
-0B2.F,revolut,7.6923,EUR,"1,002.50",128.50,-1.91%,OFF,VALID,TRAILING_STOP,EXIT NOW,Bawag,Euro,-1.4%,Trailing stop broken; weekly trend off,High,
-ZAL.DE,revolut,21.0704,EUR,500.00,20.64,-3.87%,OFF,NO,HARD_STOP_FROM_ENTRY,EXIT NOW,Zalando SE,Euro,-13.0%,Hard Stop From Entry; weekly trend off,High,
-EVK.DE,revolut,33.557,EUR,501.25,15.59,1.76%,ON,VALID,BACKTEST_END,WATCH EXIT,Evonik,Euro,4.4%,No active strategy signal,Medium,⚠ Trend vs Exit
-MEL.MC,revolut,52.8688,EUR,500.00,9.60,-0.10%,ON,VALID,BACKTEST_END,WATCH EXIT,Melia Hotels,Euro,1.5%,No active strategy signal,Medium,⚠ Trend vs Exit
-ROP,revolut,1.3976,USD,501.08,351.07,1.25%,ON,VALID,BACKTEST_END,WATCH EXIT,Roper Technologies,USD,-2.1%,No active strategy signal,Medium,⚠ Trend vs Exit
-INTU,revolut,1.1086,USD,501.08,432.55,1.33%,ON,NO,BACKTEST_END,WATCH EXIT,Intuit,USD,-4.3%,No active strategy signal,Medium,⚠ Trend vs Exit

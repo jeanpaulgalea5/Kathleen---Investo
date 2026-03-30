@@ -1,4 +1,0 @@
-Ticker,Platform,Quantity,Currency,Net Cost,Price,1D %,Golden,Silver,Exit Signal,Status,Name,P/L %,Exit Reason,Urgency,Conflict
-INTU,revolut,1.1086,USD,$501.08,416.44,-3.72%,OFF,NO,HARD_STOP_FROM_ENTRY,EXIT NOW,Intuit,-7.9%,Hard Stop From Entry; weekly trend off,High,
-EVK.DE,revolut,33.557,EUR,€501.25,16.43,5.39%,ON,VALID,BACKTEST_END,WATCH EXIT,Evonik,10.0%,No active strategy signal,Medium,⚠ Trend vs Exit
-MEL.MC,revolut,52.8688,EUR,€500.00,9.45,-1.56%,ON,VALID,BACKTEST_END,WATCH EXIT,Melia Hotels,-0.1%,No active strategy signal,Medium,⚠ Trend vs Exit

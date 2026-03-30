@@ -1,4 +1,0 @@
-Ticker,Platform,Quantity,Currency_x,Net Cost,Price,1D %,Golden,Silver,Exit Signal,Status,Name,Currency_y,P/L %,Exit Reason,Urgency,Conflict,__status_rank
-REP.MC,revolut,45.4161,EUR,995.52,24.00,-1.07%,ON,NO,BACKTEST_END,WATCH EXIT,Repsol,Euro,9.5%,No active strategy signal,Medium,⚠ Trend vs Exit,1
-INTU,revolut,1.1086,USD,500.00,455.56,0.07%,ON,VALID,BACKTEST_END,WATCH EXIT,Intuit,USD,1.0%,No active strategy signal,Medium,⚠ Trend vs Exit,1
-ROP,revolut,1.3976,USD,500.00,353.68,0.12%,ON,VALID,BACKTEST_END,WATCH EXIT,Roper Technologies,USD,-1.1%,No active strategy signal,Medium,⚠ Trend vs Exit,1

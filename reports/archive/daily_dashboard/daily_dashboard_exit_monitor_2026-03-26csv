@@ -1,6 +1,0 @@
-Ticker,Platform,Quantity,Currency_x,Net Cost,Price,1D %,Golden,Silver,Exit Signal,Status,Name,Currency_y,P/L %,Exit Reason,Urgency,Conflict,__status_rank
-EVK.DE,revolut,33.557,EUR,500.00,15.32,4.22%,ON,VALID,BACKTEST_END,WATCH EXIT,Evonik,Euro,2.8%,No active strategy signal,Medium,⚠ Trend vs Exit,1
-MEL.MC,revolut,52.8688,EUR,497.76,9.61,3.28%,ON,VALID,BACKTEST_END,WATCH EXIT,Melia Hotels,Euro,2.1%,No active strategy signal,Medium,⚠ Trend vs Exit,1
-ROP,revolut,1.3976,USD,500.00,346.72,0.23%,ON,NO,BACKTEST_END,WATCH EXIT,Roper Technologies,USD,-3.1%,No active strategy signal,Medium,⚠ Trend vs Exit,1
-INTU,revolut,1.1086,USD,500.00,426.86,-1.29%,ON,NO,BACKTEST_END,WATCH EXIT,Intuit,USD,-5.4%,No active strategy signal,Medium,⚠ Trend vs Exit,1
-ZAL.DE,revolut,21.0704,EUR,500.00,21.47,0.61%,ON,NO,BACKTEST_END,WATCH EXIT,Zalando SE,Euro,-9.5%,No active strategy signal,Medium,⚠ Trend vs Exit,1
