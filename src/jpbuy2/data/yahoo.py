@@ -250,6 +250,23 @@ def _daily_to_weekly(df_d: pd.DataFrame) -> pd.DataFrame:
     }
     df_w = df_d.resample("W-FRI").agg(agg)
     df_w = df_w.dropna(subset=["open", "high", "low", "close"])
+
+    # Drop the current (incomplete) week bar if today is not Friday.
+    # A weekly bar labelled W-FRI closes on Friday — any bar whose label
+    # is in the future (i.e. the week has not yet ended) contains only
+    # partial data and must NOT be used for Golden signals or backtests.
+    # Using a Monday-only bar as a "weekly close" causes false Golden
+    # ON/OFF flips mid-week, as seen with INTU on 2026-03-30.
+    if not df_w.empty:
+        import datetime
+        today = datetime.date.today()
+        last_bar_date = df_w.index[-1]
+        if hasattr(last_bar_date, "date"):
+            last_bar_date = last_bar_date.date()
+        # The bar is incomplete if its label (the coming Friday) is still in the future
+        if last_bar_date > today:
+            df_w = df_w.iloc[:-1]
+
     df_w = _normalise(df_w)
     df_w = _index_to_naive_utc(df_w)
     return df_w
