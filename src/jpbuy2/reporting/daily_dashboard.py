@@ -2151,15 +2151,15 @@ def _build_monitor_row(
     # Dashboard BUY = executable now only:
     # Golden ON + Silver VALID + not blocked + not already held
     if held_now and not golden_on:
-        status = "IN_POS"          # held + Golden OFF = watching for exit
-    elif held_now and golden_on:
-        status = "IN_POS"          # held + Golden ON  = comfortable hold
+        status = "EXIT NOW"        # backtest says exit — Golden went OFF while holding
     elif not golden_on:
-        status = "WAIT"            # not held, Golden OFF = no action
+        status = "WAIT"            # not held, Golden OFF = nothing to do
     elif blocked and silver_buy:
         status = "BLOCKED"
-    elif golden_on and silver_buy:
+    elif (not held_now) and golden_on and silver_buy:
         status = "BUY"
+    elif held_now and golden_on:
+        status = "IN_POS"
     else:
         status = "WATCH"
         
