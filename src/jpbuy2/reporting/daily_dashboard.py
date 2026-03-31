@@ -2150,17 +2150,19 @@ def _build_monitor_row(
 
     # Dashboard BUY = executable now only:
     # Golden ON + Silver VALID + not blocked + not already held
-    if not golden_on:
-        status = "WAIT"
+    if held_now and not golden_on:
+        status = "IN_POS"          # held + Golden OFF = watching for exit
+    elif held_now and golden_on:
+        status = "IN_POS"          # held + Golden ON  = comfortable hold
+    elif not golden_on:
+        status = "WAIT"            # not held, Golden OFF = no action
     elif blocked and silver_buy:
         status = "BLOCKED"
-    elif (not held_now) and golden_on and silver_buy:
+    elif golden_on and silver_buy:
         status = "BUY"
-    elif held_now and golden_on:
-        status = "IN_POS"
     else:
         status = "WATCH"
-
+        
     entry_zone = _entry_zone_label(
         df_d=df_d,
         trades=trades,
@@ -2502,7 +2504,7 @@ def generate_daily_dashboard(
     summary_archive.write_text(summary_json, encoding="utf-8")
 
     if send_email:
-        subject = f"Kathleen - Daily dashboard – {now_local.strftime('%d/%m/%Y %H:%M')}"
+        subject = f"Daily dashboard – {now_local.strftime('%d/%m/%Y %H:%M')}"
         _send_email(subject, html)
 
     return {
