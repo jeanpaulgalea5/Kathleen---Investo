@@ -1,0 +1,4 @@
+ticker,date,signal,close,rsi14,rsi_support_th,drawdown_20d,drawdown_entry_th,drawdown_overshoot_x,drawdown_overshoot_label,macd_hist,primed,reason
+IQQY.DE,2026-03-30,PRIMED,36.14500045776367,40.68797367320886,56.605510972477575,0.06565854531107802,0.020493244233228142,3.2,strong,-0.08313305071820792,True,"drawdown_macd_turn, rsi14=40.69, rsi_sup=56.61, dd20=0.066, dd_th=0.020, bullish_day, macd_improving, awaiting_macd_cross"
+VUAA.MI,2026-03-30,WAIT,107.68000030517578,32.461101659860645,58.98654056815086,0.05211266063787784,0.019635840978925675,2.65,strong,-0.4150008066213853,False,"drawdown_macd_turn, rsi14=32.46, rsi_sup=58.99, dd20=0.052, dd_th=0.020, bullish_day"
+XMEU.DE,2026-03-30,PRIMED,105.76000213623048,40.90535114887984,56.82009974058776,0.06373935027086837,0.02183145921925007,2.92,strong,-0.26479498906370025,True,"drawdown_macd_turn, rsi14=40.91, rsi_sup=56.82, dd20=0.064, dd_th=0.022, bullish_day, macd_improving, awaiting_macd_cross"
