@@ -73,6 +73,7 @@ def compute_etf_entry_features(
     grace_days = int(profile.get("drawdown_grace_days", s.drawdown_grace_days))
     grace_buy_min_ratio = float(profile.get("grace_buy_min_ratio", s.grace_buy_min_ratio))
     primed_min_ratio = float(profile.get("primed_min_ratio", s.primed_min_ratio))
+    buy_window_days = int(profile.get("buy_window_days", s.buy_window_days))
 
     out = pd.DataFrame(index=df_d.index)
     out["close"] = df_d["close"].astype(float)
@@ -138,13 +139,26 @@ def compute_etf_entry_features(
         )
     ).fillna(False)
 
-    # PRIMED: drawdown gate satisfied + MACD improving + not yet buy_gate.
-    # Expires when current drawdown heals below primed_min_ratio * threshold —
-    # at that point the dip is over and the alert is no longer meaningful.
+    # Buy window: once a BUY fires, keep the signal open while the dip is still
+    # active (drawdown_gate_live = True, i.e. overshoot >= 1x). The signal closes
+    # automatically when the drawdown heals back below the threshold.
+    # buy_window_days is a safety cap — the primary expiry is drawdown_gate_live.
+    out["buy_signal_recent"] = (
+        out["buy_gate"].rolling(buy_window_days, min_periods=1).max().astype(bool)
+    )
+    out["buy_window"] = (
+        out["buy_signal_recent"]
+        & out["drawdown_gate_live"].fillna(False)
+        & ~out["buy_gate"]  # buy_gate day itself is already the trigger
+    ).fillna(False)
+
+    # PRIMED: drawdown gate satisfied + MACD improving + no cross-up yet.
+    # Expires when drawdown heals below primed_min_ratio * threshold.
     out["primed"] = (
         out["drawdown_gate"].fillna(False)
         & out["macd_improving"].fillna(False)
         & ~out["buy_gate"]
+        & ~out["buy_window"]
         & (out["drawdown_20d"] >= out["drawdown_entry_th"] * primed_min_ratio)
     ).fillna(False)
 
@@ -167,6 +181,8 @@ def latest_etf_signal(
     if bool(row.get("strong_buy", False)):
         signal = "STRONG_BUY"
     elif bool(row.get("buy_gate", False)):
+        signal = "BUY"
+    elif bool(row.get("buy_window", False)):
         signal = "BUY"
     elif bool(row.get("primed", False)):
         signal = "PRIMED"
@@ -193,6 +209,8 @@ def latest_etf_signal(
         reasons.append("awaiting_macd_cross")
     if bool(row.get("grace_entry", False)):
         reasons.append("grace_window_entry")
+    if bool(row.get("buy_window", False)):
+        reasons.append("buy_window_open")
 
     dd20 = float(row["drawdown_20d"]) if pd.notna(row.get("drawdown_20d")) else None
     dd_th = float(row["drawdown_entry_th"]) if pd.notna(row.get("drawdown_entry_th")) else None
@@ -224,6 +242,7 @@ def latest_etf_signal(
         "drawdown_overshoot_label": overshoot_label,
         "macd_hist": float(row["macd_hist"]) if pd.notna(row["macd_hist"]) else None,
         "primed": bool(row.get("primed", False)),
+        "buy_window_active": bool(row.get("buy_window", False)),
         "grace_entry": bool(row.get("grace_entry", False)),
         "reason": ", ".join(reasons) if reasons else "No ETF setup.",
     }
