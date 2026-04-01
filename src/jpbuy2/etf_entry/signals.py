@@ -70,6 +70,9 @@ def compute_etf_entry_features(
     dd_entry_q = float(profile.get("drawdown_entry_quantile", s.drawdown_entry_quantile))
     rsi_support_q = float(profile.get("rsi_support_quantile", s.rsi_support_quantile))
     require_bullish_day = bool(profile.get("require_bullish_day", True))
+    grace_days = int(profile.get("drawdown_grace_days", s.drawdown_grace_days))
+    grace_buy_min_ratio = float(profile.get("grace_buy_min_ratio", s.grace_buy_min_ratio))
+    primed_min_ratio = float(profile.get("primed_min_ratio", s.primed_min_ratio))
 
     out = pd.DataFrame(index=df_d.index)
     out["close"] = df_d["close"].astype(float)
@@ -91,6 +94,21 @@ def compute_etf_entry_features(
     positive_dd = out["drawdown_20d"].where(out["drawdown_20d"] > 0)
     out["drawdown_entry_th"] = _rolling_quantile(positive_dd, lookback=lookback, q=dd_entry_q)
 
+    # Grace window: peak drawdown over the last N bars. Allows the MACD cross-up
+    # to fire a BUY even if price has partially recovered since the dip low.
+    out["drawdown_peak_grace"] = (
+        out["drawdown_20d"].rolling(grace_days, min_periods=1).max()
+    )
+    out["drawdown_gate_live"] = out["drawdown_20d"] >= out["drawdown_entry_th"]
+    # Grace gate: peak was above threshold recently AND current drawdown still
+    # meaningful (>= grace_buy_min_ratio * threshold). Prevents buying into a healed dip.
+    out["drawdown_gate_grace"] = (
+        out["drawdown_peak_grace"] >= out["drawdown_entry_th"]
+    ) & (
+        out["drawdown_20d"] >= out["drawdown_entry_th"] * grace_buy_min_ratio
+    )
+    out["drawdown_gate"] = out["drawdown_gate_live"] | out["drawdown_gate_grace"]
+
     # RSI is supportive only; not a hard veto.
     out["rsi_support_th"] = _rolling_quantile(out["rsi14"], lookback=lookback, q=rsi_support_q)
     out["rsi_support_ok"] = out["rsi14"] <= out["rsi_support_th"]
@@ -98,9 +116,16 @@ def compute_etf_entry_features(
     bullish_ok = out["bullish_day"] if require_bullish_day else True
 
     out["buy_gate"] = (
-        (out["drawdown_20d"] >= out["drawdown_entry_th"])
+        out["drawdown_gate"].fillna(False)
         & out["macd_slope_cross_up"].fillna(False)
         & bullish_ok
+    ).fillna(False)
+
+    # Track whether this entry used the grace window (price partially recovered)
+    out["grace_entry"] = (
+        out["buy_gate"]
+        & out["drawdown_gate_grace"].fillna(False)
+        & ~out["drawdown_gate_live"].fillna(False)
     ).fillna(False)
 
     out["signal_lane"] = "DRAWDOWN_MACD_TURN"
@@ -113,12 +138,14 @@ def compute_etf_entry_features(
         )
     ).fillna(False)
 
-    # PRIMED: drawdown gate already satisfied + MACD improving, but cross-up not yet fired.
-    # Signals that a BUY may be one bar away — have capital ready.
+    # PRIMED: drawdown gate satisfied + MACD improving + not yet buy_gate.
+    # Expires when current drawdown heals below primed_min_ratio * threshold —
+    # at that point the dip is over and the alert is no longer meaningful.
     out["primed"] = (
-        (out["drawdown_20d"] >= out["drawdown_entry_th"])
+        out["drawdown_gate"].fillna(False)
         & out["macd_improving"].fillna(False)
         & ~out["buy_gate"]
+        & (out["drawdown_20d"] >= out["drawdown_entry_th"] * primed_min_ratio)
     ).fillna(False)
 
     out["fwd_1y_return"] = out["close"].shift(-s.forward_days) / out["close"] - 1.0
@@ -164,6 +191,8 @@ def latest_etf_signal(
         reasons.append("macd_improving")
     if signal == "PRIMED":
         reasons.append("awaiting_macd_cross")
+    if bool(row.get("grace_entry", False)):
+        reasons.append("grace_window_entry")
 
     dd20 = float(row["drawdown_20d"]) if pd.notna(row.get("drawdown_20d")) else None
     dd_th = float(row["drawdown_entry_th"]) if pd.notna(row.get("drawdown_entry_th")) else None
@@ -195,5 +224,6 @@ def latest_etf_signal(
         "drawdown_overshoot_label": overshoot_label,
         "macd_hist": float(row["macd_hist"]) if pd.notna(row["macd_hist"]) else None,
         "primed": bool(row.get("primed", False)),
+        "grace_entry": bool(row.get("grace_entry", False)),
         "reason": ", ".join(reasons) if reasons else "No ETF setup.",
     }
