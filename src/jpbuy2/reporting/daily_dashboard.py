@@ -25,6 +25,7 @@ from ..signals.golden import compute_golden_weekly_flags
 from ..signals.silver import silver_signal
 from .exit_monitor import load_current_holdings_from_workbook, build_exit_monitor
 from ..etf_entry import ETFEntrySettings, latest_etf_signal, optimise_ticker
+from ..strategy_select import settings_adaptive, select_strategy
 
 try:
     from zoneinfo import ZoneInfo
@@ -1215,6 +1216,11 @@ def _build_backtest_reconciliation(
 ) -> pd.DataFrame:
     """
     Reconcile dashboard state vs latest open/closed state implied by backtest_windows.csv.
+
+    Important:
+    - backtest_windows.csv only contains rows for Golden cycles that produced a Silver entry.
+    - Therefore a newly opened Golden cycle with no Silver entry yet can make the latest BT row
+      look stale relative to the live dashboard.
     """
     try:
         bt = pd.read_csv(backtest_windows_csv)
@@ -1252,6 +1258,7 @@ def _build_backtest_reconciliation(
         )
 
     rows: list[dict[str, Any]] = []
+    now_ts = pd.Timestamp.today().normalize()
 
     for _, r in monitor_df.iterrows():
         ticker = str(r.get("Ticker", "")).strip().upper()
@@ -1296,12 +1303,34 @@ def _build_backtest_reconciliation(
         backtest_state = str(r.get("Backtest State", "")).strip().upper()
         held_now = ticker in held_tickers
 
+        # Stale BT row case:
+        # dashboard sees a current Golden ON regime, but latest BT row is an old closed cycle.
+        stale_bt_row = (
+            pd.notna(golden_off_dt)
+            and dashboard_golden_on
+            and (now_ts - golden_off_dt.normalize()).days > 21
+        )
+
+        if stale_bt_row:
+            rows.append(
+                {
+                    "Ticker": ticker,
+                    "Dashboard Golden": "ON" if dashboard_golden_on else "OFF",
+                    "Dashboard Status": dashboard_status,
+                    "Backtest State": backtest_state,
+                    "Backtest Golden": "ON" if golden_on_bt else "OFF",
+                    "Backtest Silver": "ON" if silver_on_bt else "OFF",
+                    "Held": "YES" if held_now else "NO",
+                    "Golden Match": "STALE",
+                    "Silver / Position Match": "STALE",
+                    "Reconciliation": "STALE BT ROW",
+                }
+            )
+            continue
+
         golden_match = dashboard_golden_on == golden_on_bt
 
-        # Reconcile strategy state against the engine-style backtest state,
-        # not against the dashboard action label. Dashboard Status is
-        # portfolio-aware and can legitimately be WATCH even when the
-        # engine-style state is IN_POS for names not currently held.
+        # Reconcile against engine-style state, not dashboard action label.
         if silver_on_bt:
             silver_match = backtest_state == "IN_POS"
         else:
@@ -1325,7 +1354,6 @@ def _build_backtest_reconciliation(
         )
 
     return pd.DataFrame(rows)
-
 
 def _reconciliation_summary_html(recon_df: pd.DataFrame) -> str:
     if recon_df is None or recon_df.empty:
@@ -1746,6 +1774,7 @@ def _build_html(
         "Opportunity Score",
         "Name",
         "Ticker",
+        "Strategy Used",
         "Platform",
         "Currency",
         "Cycle Edge",
@@ -1845,6 +1874,7 @@ def _build_html(
     monitor_cols = [
         "Ticker",
         "Name",
+        "Strategy Used",
         "Status",
         "Price",
         "1D %",
@@ -2103,8 +2133,6 @@ def _build_monitor_row(
     target_price: Any = None,
     held_tickers: set[str] | None = None,
 ) -> dict[str, Any]:
-    s = settings_for(asset_type)  # type: ignore[arg-type]
-
     if _is_non_gold_etf(asset_type=asset_type, ticker=ticker, name=name):
         return _build_etf_monitor_row(
             data_dir=data_dir,
@@ -2119,6 +2147,19 @@ def _build_monitor_row(
 
     df_w = fetch_ohlcv(ticker, start=start, end=end, interval="1wk", data_dir=data_dir)
     df_d = fetch_ohlcv(ticker, start=start, end=end, interval="1d", data_dir=data_dir)
+
+    asset_type_norm = str(asset_type or "").strip().lower()
+    strategy_used = ""
+
+    if asset_type_norm not in {"etf", "goldetf", "commodity"}:
+        strategy_used, s, _ = select_strategy(
+            ticker=ticker,
+            df_d=df_d,
+            df_w=df_w,
+            data_dir=data_dir,
+        )
+    else:
+        s = settings_for(asset_type)  # type: ignore[arg-type]
 
     df_i = None
     if bool(getattr(s, "use_intraday_emergency_exit", False)):
@@ -2154,7 +2195,7 @@ def _build_monitor_row(
     )
 
     backtest_error = ""
-    
+
     try:
         bt = run_backtest(df_d, df_w, asset_type, s, ticker=ticker, df_i=df_i)  # type: ignore[arg-type]
         trades = bt.get("trades", []) or []
@@ -2165,6 +2206,7 @@ def _build_monitor_row(
             backtest_error = "Insufficient history"
         else:
             raise
+
     price = float(df_d["close"].iloc[-1])
     prev_close = float(df_d["close"].iloc[-2]) if len(df_d) > 1 else price
     day_pct = ((price / prev_close) - 1.0) * 100.0 if prev_close else None
@@ -2210,21 +2252,15 @@ def _build_monitor_row(
     median_ret = float(pd.Series(rets).median()) if rets else None
     compounded = ((pd.Series(rets) / 100.0 + 1.0).prod() - 1.0) * 100.0 if rets else None
 
-    use_break_of_stabilisation_high = bool(
-        getattr(s, "use_break_of_stabilisation_high", False)
-    )
-
     ticker_norm = str(ticker).strip().upper()
     held_now = ticker_norm in (held_tickers or set())
 
     raw_engine_state = str(engine_state.get("state", "WAIT")).upper()
 
-    # Dashboard BUY = executable now only:
-    # Golden ON + Silver VALID + not blocked + not already held
     if held_now and not golden_on:
-        status = "EXIT NOW"        # backtest says exit — Golden went OFF while holding
+        status = "EXIT NOW"
     elif not golden_on:
-        status = "WAIT"            # not held, Golden OFF = nothing to do
+        status = "WAIT"
     elif blocked and silver_buy:
         status = "BLOCKED"
     elif (not held_now) and golden_on and silver_buy:
@@ -2233,7 +2269,7 @@ def _build_monitor_row(
         status = "IN_POS"
     else:
         status = "WATCH"
-        
+
     entry_zone = _entry_zone_label(
         df_d=df_d,
         trades=trades,
@@ -2264,7 +2300,6 @@ def _build_monitor_row(
         last_n_years=3,
     )
 
-    # --- cycle confidence calculation ---
     age_val = _parse_pct_value(_fmt_pct(cycle_stats.get("cycle_age_pct"), 0))
     wr_val = _parse_pct_value(_fmt_pct(cycle_stats.get("cycle_win_rate_3y"), 1))
 
@@ -2284,7 +2319,7 @@ def _build_monitor_row(
     cycle_confidence = None
     if wr_val is not None:
         cycle_confidence = wr_val * decay
-        
+
     current_opportunity_score = _current_opportunity_score(
         cycle_edge=str(cycle_stats.get("cycle_edge", "") or ""),
         cycle_age_pct=_fmt_pct(cycle_stats.get("cycle_age_pct"), 0),
@@ -2294,14 +2329,14 @@ def _build_monitor_row(
     )
     priority_score = current_opportunity_score
     priority = _current_opportunity_stars(priority_score)
-    
-        
+
     return {
         "Ticker": ticker,
         "Name": str(name or "").strip(),
         "Type": asset_type,
         "Platform": platform,
         "Currency": currency,
+        "Strategy Used": strategy_used,
         "Status": status,
         "Backtest State": raw_engine_state,
         "Price": _fmt_num(display_price, 2),
@@ -2342,7 +2377,6 @@ def _build_monitor_row(
         "Latest Exit Reason": backtest_error or latest_exit_reason,
     }
 
-
 def generate_daily_dashboard(
     *,
     watchlist_csv: str = "watchlist.csv",
@@ -2357,6 +2391,10 @@ def generate_daily_dashboard(
 ) -> dict[str, Any]:
     repo_root = Path.cwd()
     wl = load_watchlist_csv(watchlist_csv)
+
+    if "ticker" in wl.columns:
+        wl["ticker"] = wl["ticker"].astype(str).str.strip().str.upper()
+        wl = wl.drop_duplicates(subset=["ticker"], keep="first").copy()
 
     rows: list[dict[str, Any]] = []
 
@@ -2528,6 +2566,7 @@ def generate_daily_dashboard(
         "wait_count": int((monitor_df["Status"] == "WAIT").sum()),
         "exit_now_count": int((exit_df["Status"] == "EXIT NOW").sum()) if not exit_df.empty else 0,
         "git_sha": _read_git_sha(repo_root),
+        "watchlist_rows_after_dedup": len(wl),
     }
 
     recon_df = _build_backtest_reconciliation(
@@ -2584,7 +2623,7 @@ def generate_daily_dashboard(
     summary_archive.write_text(summary_json, encoding="utf-8")
 
     if send_email:
-        subject = f"Kathleen - Daily dashboard – {now_local.strftime('%d/%m/%Y %H:%M')}"
+        subject = f"Daily dashboard – {now_local.strftime('%d/%m/%Y %H:%M')}"
         _send_email(subject, html)
 
     return {
