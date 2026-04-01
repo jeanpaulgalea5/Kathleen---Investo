@@ -16,7 +16,6 @@ import pandas as pd
 
 from ..backtest import run_backtest
 from ..config import settings_for
-from ..strategy_select import settings_adaptive
 from ..data.yahoo import fetch_ohlcv, fetch_intraday_ohlcv
 from ..indicators.macd import compute_macd
 from ..indicators.rsi import rsi_wilder
@@ -1297,34 +1296,6 @@ def _build_backtest_reconciliation(
         backtest_state = str(r.get("Backtest State", "")).strip().upper()
         held_now = ticker in held_tickers
 
-        # Detect stale BT row: dashboard sees Golden ON but the latest BT row has
-        # Golden OFF more than 21 days ago. This means a new Golden cycle has started
-        # since the last recorded BT entry — backtest_windows only writes a row when
-        # a Silver entry fires, so new cycles with no entry yet are invisible to it.
-        now_ts_recon = pd.Timestamp.today().normalize()
-        stale_bt_row = (
-            dashboard_golden_on
-            and pd.notna(golden_off_dt)
-            and (now_ts_recon - golden_off_dt).days > 21
-        )
-
-        if stale_bt_row:
-            rows.append(
-                {
-                    "Ticker": ticker,
-                    "Dashboard Golden": "ON",
-                    "Dashboard Status": dashboard_status,
-                    "Backtest State": backtest_state,
-                    "Backtest Golden": "OFF (stale)",
-                    "Backtest Silver": "OFF",
-                    "Held": "YES" if held_now else "NO",
-                    "Golden Match": "STALE",
-                    "Silver / Position Match": "N/A",
-                    "Reconciliation": "STALE BT ROW",
-                }
-            )
-            continue
-
         golden_match = dashboard_golden_on == golden_on_bt
 
         # Reconcile strategy state against the engine-style backtest state,
@@ -1367,9 +1338,7 @@ def _reconciliation_summary_html(recon_df: pd.DataFrame) -> str:
 
     total = len(recon_df)
     ok_count = int((recon_df["Reconciliation"] == "OK").sum())
-    mismatch_count = int((recon_df["Reconciliation"] == "MISMATCH").sum())
-    stale_count = int((recon_df["Reconciliation"] == "STALE BT ROW").sum())
-    no_bt_count = int((recon_df["Reconciliation"] == "NO BACKTEST ROW").sum())
+    mismatch_count = total - ok_count
 
     cols = [
         "Ticker",
@@ -1388,17 +1357,14 @@ def _reconciliation_summary_html(recon_df: pd.DataFrame) -> str:
     <div class="card section">
       <h2>Backtest Reconciliation</h2>
       <div class="muted">
-        This section checks the latest dashboard state against the latest row per ticker in reports/latest/backtest_windows.csv.
+        TThis section checks the latest dashboard state against the latest row per ticker in reports/latest/backtest_windows.csv.
         Golden is treated as ON when the latest backtest row has Golden ON populated and Golden OFF blank.
         Backtest Silver is treated as ON when the latest backtest row has Silver Entry Date populated and either Exit Date is blank or Exit Reason = BACKTEST_END.
-        STALE BT ROW means the dashboard sees Golden ON but the latest backtest row has Golden OFF more than 21 days ago — a new cycle started that has no Silver entry yet, so backtest_windows has no row for it.
       </div>
       <div class="chips" style="margin-top:10px;">
         <div class="chip"><span>Rows checked</span><b>{total}</b></div>
         <div class="chip"><span>OK</span><b>{ok_count}</b></div>
         <div class="chip"><span>MISMATCH</span><b>{mismatch_count}</b></div>
-        <div class="chip"><span>STALE BT ROW</span><b>{stale_count}</b></div>
-        <div class="chip"><span>NO BACKTEST ROW</span><b>{no_bt_count}</b></div>
       </div>
       {_table_html(recon_df, cols, 'No reconciliation rows were produced.')}
     </div>
@@ -1684,14 +1650,16 @@ def _build_html(
         & (etf_add_df["Backtest State"].isin(["BUY", "STRONG_BUY", "PRIMED"]))
     ].copy()
 
-    # PRIMED ETFs — all ETFs (held or not) with PRIMED signal. Separate section
-    # so they surface in the Action Panel regardless of held status.
+    # PRIMED ETFs — unheld ETFs only with PRIMED signal.
+    # Held ETFs with PRIMED already surface in "ETF add opportunities" above.
     primed_etf_df = monitor_df.copy()
+    primed_etf_df["Ticker"] = primed_etf_df["Ticker"].astype(str).str.strip().str.upper()
     primed_etf_df["Type"] = primed_etf_df["Type"].astype(str).str.strip().str.upper()
     primed_etf_df["Backtest State"] = primed_etf_df["Backtest State"].astype(str).str.strip().str.upper()
     primed_etf_df = primed_etf_df[
         (primed_etf_df["Type"] == "ETF")
         & (primed_etf_df["Backtest State"] == "PRIMED")
+        & ~primed_etf_df["Ticker"].isin(held_tickers)
     ].copy()
     if not primed_etf_df.empty and "Priority Score" in primed_etf_df.columns:
         primed_etf_df.sort_values(
@@ -2135,7 +2103,8 @@ def _build_monitor_row(
     target_price: Any = None,
     held_tickers: set[str] | None = None,
 ) -> dict[str, Any]:
-    # ETF path: short-circuit before any data fetch
+    s = settings_for(asset_type)  # type: ignore[arg-type]
+
     if _is_non_gold_etf(asset_type=asset_type, ticker=ticker, name=name):
         return _build_etf_monitor_row(
             data_dir=data_dir,
@@ -2148,24 +2117,8 @@ def _build_monitor_row(
             held_tickers=held_tickers,
         )
 
-    # Fetch OHLCV data first so it can be passed to settings_adaptive
     df_w = fetch_ohlcv(ticker, start=start, end=end, interval="1wk", data_dir=data_dir)
     df_d = fetch_ohlcv(ticker, start=start, end=end, interval="1d", data_dir=data_dir)
-
-    # Use the same per-ticker adaptive strategy that the batch backtest uses.
-    # This ensures the dashboard engine reconstruction and reconciliation are
-    # computed on the same profile as backtest_windows.csv.
-    # ETFs use the fixed settings_for path (handled above via early return).
-    try:
-        s = settings_adaptive(
-            ticker=ticker,
-            df_d=df_d,
-            df_w=df_w,
-            data_dir=data_dir,
-        )
-    except Exception as exc:
-        print(f"WARNING: settings_adaptive failed for {ticker}, falling back to settings_for: {exc}")
-        s = settings_for(asset_type)  # type: ignore[arg-type]
 
     df_i = None
     if bool(getattr(s, "use_intraday_emergency_exit", False)):
@@ -2266,20 +2219,16 @@ def _build_monitor_row(
 
     raw_engine_state = str(engine_state.get("state", "WAIT")).upper()
 
-    # Dashboard status: derive from live signals AND engine state.
-    # ARMED requires use_break_of_stabilisation_high=True AND a pending break level
-    # from the engine reconstruction — this distinguishes it from a plain BUY.
+    # Dashboard BUY = executable now only:
+    # Golden ON + Silver VALID + not blocked + not already held
     if held_now and not golden_on:
-        status = "EXIT NOW"        # Golden went OFF while holding — review exit
+        status = "EXIT NOW"        # backtest says exit — Golden went OFF while holding
     elif not golden_on:
         status = "WAIT"            # not held, Golden OFF = nothing to do
     elif blocked and silver_buy:
         status = "BLOCKED"
     elif (not held_now) and golden_on and silver_buy:
-        if use_break_of_stabilisation_high and engine_state.get("pending_break_high") is not None:
-            status = "ARMED"       # valid setup, waiting to break the stabilisation high
-        else:
-            status = "BUY"         # executable immediately
+        status = "BUY"
     elif held_now and golden_on:
         status = "IN_POS"
     else:
@@ -2408,14 +2357,6 @@ def generate_daily_dashboard(
 ) -> dict[str, Any]:
     repo_root = Path.cwd()
     wl = load_watchlist_csv(watchlist_csv)
-
-    # Guard: drop duplicate ticker rows (keep first occurrence).
-    # Duplicates cause the ticker to be processed twice, inflating monitor_df
-    # and the reconciliation mismatch count.
-    _before = len(wl)
-    wl = wl.drop_duplicates(subset=["ticker"], keep="first").reset_index(drop=True)
-    if len(wl) < _before:
-        print(f"WARNING: watchlist had {_before - len(wl)} duplicate ticker(s) — removed before processing.")
 
     rows: list[dict[str, Any]] = []
 
@@ -2560,27 +2501,15 @@ def generate_daily_dashboard(
     now_local = datetime.now(_tz())
     stamp = now_local.strftime("%Y-%m-%d")
 
-    # Compute buy candidates count here (in generate_daily_dashboard scope),
-    # replicating the same filtering _build_html applies: Status==BUY, win rate >=60%,
-    # not currently held. Uses current_holdings_df (all holdings, including ETFs)
-    # so the held exclusion is complete — exit_df only contains watchlist stocks.
-    _all_held = {
-        str(x).strip().upper()
-        for x in current_holdings_df["Ticker"].dropna()
-    } if not current_holdings_df.empty else set()
+    held_tickers = set()
+    if not exit_df.empty and "Ticker" in exit_df.columns:
+        held_tickers = {
+            str(x).strip().upper()
+            for x in exit_df["Ticker"].dropna().tolist()
+            if str(x).strip()
+        }
 
-    _buy_mask = monitor_df["Status"].isin(["BUY", "ARMED"])
-    _wr_num = pd.to_numeric(
-        monitor_df.loc[_buy_mask, "Win Rate last 3 Years"]
-        .astype(str).str.replace("%", "", regex=False),
-        errors="coerce",
-    )
-    _buy_filtered = monitor_df[_buy_mask].copy()
-    _buy_filtered = _buy_filtered[_wr_num.fillna(0).values >= 60.0]
-    _buy_filtered = _buy_filtered[
-        ~_buy_filtered["Ticker"].astype(str).str.strip().str.upper().isin(_all_held)
-    ]
-    buy_candidates_count = int(len(_buy_filtered))
+    buy_candidates_count = int(len(unheld_buy_df)) if 'unheld_buy_df' in locals() else 0
 
     audit = {
         "generated_at_local": now_local.strftime("%d/%m/%Y %H:%M:%S"),
