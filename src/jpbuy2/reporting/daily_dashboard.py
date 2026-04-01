@@ -2584,7 +2584,7 @@ def generate_daily_dashboard(
     summary_archive.write_text(summary_json, encoding="utf-8")
 
     if send_email:
-        subject = f"Daily dashboard – {now_local.strftime('%d/%m/%Y %H:%M')}"
+        subject = f"Kathleen - Daily dashboard – {now_local.strftime('%d/%m/%Y %H:%M')}"
         _send_email(subject, html)
 
     return {
