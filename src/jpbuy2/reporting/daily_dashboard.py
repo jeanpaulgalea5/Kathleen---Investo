@@ -1860,15 +1860,15 @@ def _build_html(
         "Quantity",
         "Currency",
         "Net Cost",
-        "Price",
         "P/L %",
         "1D %",
         "Golden",
         "Silver",
         "Exit Reason",
-        "Conflict",
-        "Urgency",
-        "Status",
+        "Price",
+        "Target Price",
+        "Prudent Target",
+        "Prudent Upside %",
     ]
 
     monitor_cols = [
@@ -1890,7 +1890,10 @@ def _build_html(
         "Win Rate %",
         "Win Rate last 3 Years",
         "Median Return %",
-        "Latest Exit Reason",
+        "Price",
+        "Target Price",
+        "Prudent Target",
+        "Prudent Upside %",
     ]
 
     holdings_cols = [
@@ -2623,7 +2626,7 @@ def generate_daily_dashboard(
     summary_archive.write_text(summary_json, encoding="utf-8")
 
     if send_email:
-        subject = f"Kathleen - Daily dashboard – {now_local.strftime('%d/%m/%Y %H:%M')}"
+        subject = f"Daily dashboard – {now_local.strftime('%d/%m/%Y %H:%M')}"
         _send_email(subject, html)
 
     return {
