@@ -1,0 +1,26 @@
+{
+  "ticker": "ORCL",
+  "best": "S4_WIDEATR",
+  "params": {
+    "golden_trailing_atr_mult": 2.2
+  },
+  "cums": {
+    "S0_BASE": 92.61,
+    "S1_FAST": 98.23,
+    "S2_HOLD12": 88.68,
+    "S3_HOLD16": 113.13,
+    "S4_WIDEATR": 182.92,
+    "S5_COMBO": 155.31,
+    "S6_TIGHT": 81.58,
+    "S2_HOLD12_BUF": 81.31,
+    "S3_HOLD16_BUF": 104.75,
+    "S5_COMBO_BUF": 144.9,
+    "S8_DI_GUARD": 93.75,
+    "S8_DI_GUARD_BUF": 45.94,
+    "S11_VOLATILE_FAST": 102.91,
+    "S12_RECOVERY": 24.56
+  },
+  "recent_cum_3y": null,
+  "recent_override": null,
+  "computed": "2026-04-01T16:16:14"
+}

@@ -1,0 +1,29 @@
+{
+  "ticker": "FRA.DE",
+  "best": "S3_HOLD16_BUF",
+  "params": {
+    "golden_min_weeks_on": 16,
+    "golden_trailing_atr_mult": 1.4,
+    "golden_rsi_entry_buffer": 30.0,
+    "golden_rsi_high_quantile": 0.92
+  },
+  "cums": {
+    "S0_BASE": -34.46,
+    "S1_FAST": -50.81,
+    "S2_HOLD12": -38.25,
+    "S3_HOLD16": -35.63,
+    "S4_WIDEATR": -49.76,
+    "S5_COMBO": -62.75,
+    "S6_TIGHT": -50.54,
+    "S2_HOLD12_BUF": -43.31,
+    "S3_HOLD16_BUF": -27.95,
+    "S5_COMBO_BUF": -64.3,
+    "S8_DI_GUARD": -45.17,
+    "S8_DI_GUARD_BUF": -52.65,
+    "S11_VOLATILE_FAST": -37.77,
+    "S12_RECOVERY": -31.45
+  },
+  "recent_cum_3y": 21.91,
+  "recent_override": null,
+  "computed": "2026-04-01T16:09:36"
+}

@@ -1,0 +1,30 @@
+{
+  "ticker": "BRBY.L",
+  "best": "S8_DI_GUARD_BUF",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0,
+    "silver_require_bullish_di": true,
+    "golden_rsi_entry_buffer": 30.0,
+    "golden_rsi_high_quantile": 0.92
+  },
+  "cums": {
+    "S0_BASE": -7.78,
+    "S1_FAST": 64.18,
+    "S2_HOLD12": 17.19,
+    "S3_HOLD16": 24.73,
+    "S4_WIDEATR": -31.03,
+    "S5_COMBO": -21.04,
+    "S6_TIGHT": 74.79,
+    "S2_HOLD12_BUF": 29.45,
+    "S3_HOLD16_BUF": 9.24,
+    "S5_COMBO_BUF": 9.33,
+    "S8_DI_GUARD": 87.12,
+    "S8_DI_GUARD_BUF": 172.87,
+    "S11_VOLATILE_FAST": 28.04,
+    "S12_RECOVERY": -18.84
+  },
+  "recent_cum_3y": 63.33,
+  "recent_override": null,
+  "computed": "2026-04-01T16:12:15"
+}

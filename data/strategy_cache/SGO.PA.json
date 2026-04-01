@@ -1,0 +1,29 @@
+{
+  "ticker": "SGO.PA",
+  "best": "S3_HOLD16_BUF",
+  "params": {
+    "golden_min_weeks_on": 16,
+    "golden_trailing_atr_mult": 1.4,
+    "golden_rsi_entry_buffer": 30.0,
+    "golden_rsi_high_quantile": 0.92
+  },
+  "cums": {
+    "S0_BASE": 34.14,
+    "S1_FAST": 5.29,
+    "S2_HOLD12": 37.43,
+    "S3_HOLD16": 31.9,
+    "S4_WIDEATR": -4.9,
+    "S5_COMBO": 7.66,
+    "S6_TIGHT": 11.26,
+    "S2_HOLD12_BUF": 62.94,
+    "S3_HOLD16_BUF": 84.28,
+    "S5_COMBO_BUF": 37.2,
+    "S8_DI_GUARD": 13.81,
+    "S8_DI_GUARD_BUF": 64.36,
+    "S11_VOLATILE_FAST": 10.2,
+    "S12_RECOVERY": 50.29
+  },
+  "recent_cum_3y": -3.6,
+  "recent_override": null,
+  "computed": "2026-04-01T16:08:12"
+}

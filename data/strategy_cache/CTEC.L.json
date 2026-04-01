@@ -1,0 +1,26 @@
+{
+  "ticker": "CTEC.L",
+  "best": "S2_HOLD12",
+  "params": {
+    "golden_min_weeks_on": 12
+  },
+  "cums": {
+    "S0_BASE": 34.38,
+    "S1_FAST": -2.61,
+    "S2_HOLD12": 42.03,
+    "S3_HOLD16": 32.83,
+    "S4_WIDEATR": 34.38,
+    "S5_COMBO": 23.05,
+    "S6_TIGHT": -14.35,
+    "S2_HOLD12_BUF": 15.91,
+    "S3_HOLD16_BUF": 2.86,
+    "S5_COMBO_BUF": -6.01,
+    "S8_DI_GUARD": 9.82,
+    "S8_DI_GUARD_BUF": -2.94,
+    "S11_VOLATILE_FAST": -1.44,
+    "S12_RECOVERY": -1.06
+  },
+  "recent_cum_3y": 13.17,
+  "recent_override": null,
+  "computed": "2026-04-01T16:13:17"
+}

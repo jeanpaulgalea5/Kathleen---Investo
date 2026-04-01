@@ -1,0 +1,27 @@
+{
+  "ticker": "SPI.L",
+  "best": "S1_FAST",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0
+  },
+  "cums": {
+    "S0_BASE": 20.22,
+    "S1_FAST": 47.27,
+    "S2_HOLD12": 7.43,
+    "S3_HOLD16": 9.85,
+    "S4_WIDEATR": 0.01,
+    "S5_COMBO": 30.67,
+    "S6_TIGHT": 16.4,
+    "S2_HOLD12_BUF": 22.03,
+    "S3_HOLD16_BUF": 24.78,
+    "S5_COMBO_BUF": 7.99,
+    "S8_DI_GUARD": 36.58,
+    "S8_DI_GUARD_BUF": 15.69,
+    "S11_VOLATILE_FAST": 33.14,
+    "S12_RECOVERY": -10.28
+  },
+  "recent_cum_3y": 3.68,
+  "recent_override": null,
+  "computed": "2026-04-01T16:12:33"
+}
