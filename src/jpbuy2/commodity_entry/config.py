@@ -1,0 +1,122 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class CommodityEntrySettings:
+    """
+    Commodity dip-entry settings.
+
+    Design:
+    - separate commodity engine from ETF engine
+    - support multiple commodity types via profiles
+    - default to long-term accumulation behaviour
+    - remain entry-only for now
+    """
+
+    min_history_days: int = 520
+
+    # Indicators
+    rsi_period: int = 14
+    macd_fast: int = 12
+    macd_slow: int = 26
+    macd_signal: int = 9
+
+    # Forward horizons
+    forward_days_1y: int = 252
+    forward_days_2y: int = 504
+    forward_days_3y: int = 756
+
+    default_profile: dict = field(
+        default_factory=lambda: {
+            "commodity_type": "generic",
+            "entry_cost_pct": 0.00,
+            "adaptive_lookback_days": 756,
+            "drawdown_lookback_days": 20,
+            "drawdown_entry_quantile": 0.88,
+            "rsi_support_quantile": 0.35,
+            "require_bullish_day": True,
+            "cooldown_days": 30,
+            "max_windows_per_year": 3,
+            "monthly_ma_period": 10,
+            "weekly_ma_period": 40,
+            "weekly_ma_slope_weeks": 4,
+            "deep_drawdown_min": 0.10,
+            "daily_rsi_cap": 45.0,
+            "strong_buy_extra_drawdown": 0.04,
+        }
+    )
+
+    per_type_profiles: dict[str, dict] = field(
+        default_factory=lambda: {
+            "gold": {
+                "commodity_type": "gold",
+                "entry_cost_pct": 0.00,
+                "adaptive_lookback_days": 756,
+                "drawdown_lookback_days": 20,
+                "drawdown_entry_quantile": 0.90,
+                "rsi_support_quantile": 0.35,
+                "require_bullish_day": False,
+                "cooldown_days": 35,
+                "max_windows_per_year": 4,
+                "monthly_ma_period": 10,
+                "weekly_ma_period": 40,
+                "weekly_ma_slope_weeks": 4,
+                "deep_drawdown_min": 0.04,
+                "daily_rsi_cap": 48.0,
+                "strong_buy_extra_drawdown": 0.04,
+            },
+            "silver": {
+                "commodity_type": "silver",
+                "entry_cost_pct": 0.00,
+                "adaptive_lookback_days": 756,
+                "drawdown_lookback_days": 20,
+                "drawdown_entry_quantile": 0.82,
+                "rsi_support_quantile": 0.40,
+                "require_bullish_day": True,
+                "cooldown_days": 25,
+                "max_windows_per_year": 4,
+                "monthly_ma_period": 10,
+                "weekly_ma_period": 40,
+                "weekly_ma_slope_weeks": 4,
+                "deep_drawdown_min": 0.10,
+                "daily_rsi_cap": 48.0,
+                "strong_buy_extra_drawdown": 0.04,
+            },
+            "industrial": {
+                "commodity_type": "industrial",
+                "entry_cost_pct": 0.00,
+                "adaptive_lookback_days": 756,
+                "drawdown_lookback_days": 20,
+                "drawdown_entry_quantile": 0.78,
+                "rsi_support_quantile": 0.45,
+                "require_bullish_day": True,
+                "cooldown_days": 20,
+                "max_windows_per_year": 5,
+                "monthly_ma_period": 10,
+                "weekly_ma_period": 40,
+                "weekly_ma_slope_weeks": 4,
+                "deep_drawdown_min": 0.08,
+                "daily_rsi_cap": 50.0,
+                "strong_buy_extra_drawdown": 0.03,
+            },
+            "energy": {
+                "commodity_type": "energy",
+                "entry_cost_pct": 0.00,
+                "adaptive_lookback_days": 756,
+                "drawdown_lookback_days": 20,
+                "drawdown_entry_quantile": 0.92,
+                "rsi_support_quantile": 0.30,
+                "require_bullish_day": True,
+                "cooldown_days": 35,
+                "max_windows_per_year": 3,
+                "monthly_ma_period": 10,
+                "weekly_ma_period": 40,
+                "weekly_ma_slope_weeks": 4,
+                "deep_drawdown_min": 0.15,
+                "daily_rsi_cap": 40.0,
+                "strong_buy_extra_drawdown": 0.06,
+            },
+        }
+    )
