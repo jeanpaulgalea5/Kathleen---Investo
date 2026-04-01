@@ -56,6 +56,8 @@ jobs:
           mkdir -p reports/archive/daily_dashboard
           mkdir -p reports/latest/etf_entry
           mkdir -p reports/archive/etf_entry
+          mkdir -p reports/latest/commodity_entry
+          mkdir -p reports/archive/commodity_entry
           mkdir -p reports/archive/backtest
 
       - name: Check required files
@@ -307,6 +309,214 @@ jobs:
           print(f"Archived ETF run to: {archive_run_dir}")
           PY
 
+      - name: Run commodity entry optimiser
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python scripts/run_commodity_entry_optimizer.py \
+            --watchlist watchlist.csv \
+            --data-dir data/raw \
+            --out-dir reports/latest/commodity_entry
+
+      - name: Validate commodity outputs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -f reports/latest/commodity_entry/commodity_entry_latest.csv
+          test -f reports/latest/commodity_entry/commodity_entry_summary.csv
+          test -f reports/latest/commodity_entry/commodity_entry_windows.csv
+          test -f reports/latest/commodity_entry/commodity_entry_history.csv
+
+          python - <<'PY'
+          import pandas as pd
+
+          latest = pd.read_csv("reports/latest/commodity_entry/commodity_entry_latest.csv")
+          windows = pd.read_csv("reports/latest/commodity_entry/commodity_entry_windows.csv")
+          summary = pd.read_csv("reports/latest/commodity_entry/commodity_entry_summary.csv")
+
+          wl = pd.read_csv("watchlist.csv")
+          wl.columns = [str(c).strip().lower() for c in wl.columns]
+
+          if "ticker" not in wl.columns and "symbol" in wl.columns:
+              wl["ticker"] = wl["symbol"]
+
+          if "category" not in wl.columns and "type" in wl.columns:
+              wl["category"] = wl["type"]
+
+          wl["ticker"] = wl["ticker"].astype(str).str.strip().str.upper()
+          wl["category"] = wl["category"].astype(str).str.strip().str.upper()
+
+          commodities = set(wl.loc[wl["category"] == "COMMODITY", "ticker"])
+
+          for fname, df in [("latest", latest), ("windows", windows), ("summary", summary)]:
+              if not df.empty and "ticker" not in df.columns:
+                  raise SystemExit(f"{fname} output missing ticker column")
+              if not df.empty:
+                  bad = sorted(set(df["ticker"].astype(str).str.strip().str.upper()) - commodities)
+                  if bad:
+                      raise SystemExit(f"Non-commodity tickers found in commodity output ({fname}): {bad}")
+
+          print("Commodity output validation passed.")
+          PY
+
+      - name: Build and archive commodity report
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          from datetime import datetime, timezone
+          import shutil
+
+          latest_dir = Path("reports/latest/commodity_entry")
+          archive_dir = Path("reports/archive/commodity_entry")
+          archive_dir.mkdir(parents=True, exist_ok=True)
+
+          summary_csv = latest_dir / "commodity_entry_summary.csv"
+          latest_csv = latest_dir / "commodity_entry_latest.csv"
+          history_csv = latest_dir / "commodity_entry_history.csv"
+          windows_csv = latest_dir / "commodity_entry_windows.csv"
+          profiles_csv = latest_dir / "commodity_entry_profiles.csv"
+          report_md = latest_dir / "commodity_entry_report.md"
+
+          def safe_read(path: Path) -> pd.DataFrame:
+              if not path.exists():
+                  return pd.DataFrame()
+              return pd.read_csv(path)
+
+          def fmt_pct(x, digits=2):
+              try:
+                  if pd.isna(x):
+                      return ""
+                  return f"{float(x) * 100:.{digits}f}%"
+              except Exception:
+                  return str(x)
+
+          def md_table(df: pd.DataFrame) -> str:
+              if df.empty:
+                  return "_No rows_"
+              cols = [str(c) for c in df.columns]
+              rows = []
+              rows.append("| " + " | ".join(cols) + " |")
+              rows.append("| " + " | ".join(["---"] * len(cols)) + " |")
+              for _, row in df.iterrows():
+                  vals = []
+                  for c in cols:
+                      v = row[c]
+                      if pd.isna(v):
+                          vals.append("")
+                      else:
+                          vals.append(str(v).replace("\n", " ").replace("|", "\\|"))
+                  rows.append("| " + " | ".join(vals) + " |")
+              return "\n".join(rows)
+
+          summary = safe_read(summary_csv)
+          latest = safe_read(latest_csv)
+          history = safe_read(history_csv)
+          windows = safe_read(windows_csv)
+          profiles = safe_read(profiles_csv)
+
+          ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+          lines = []
+          lines.append("# Commodity Entry Report")
+          lines.append("")
+          lines.append(f"Generated: {ts}")
+          lines.append("")
+
+          lines.append("## Current Signals")
+          lines.append("")
+          if latest.empty:
+              lines.append("_No current commodity signals._")
+          else:
+              show_cols = [c for c in [
+                  "ticker", "commodity_type", "signal", "date", "close", "rsi14",
+                  "drawdown", "drawdown_entry_th", "drawdown_overshoot_x",
+                  "drawdown_overshoot_label", "structural_bull", "reason"
+              ] if c in latest.columns]
+              lines.append(md_table(latest[show_cols]))
+          lines.append("")
+
+          lines.append("## Summary")
+          lines.append("")
+          if summary.empty:
+              lines.append("_No summary data._")
+          else:
+              tmp = summary.copy()
+              for c in ["avg_2y_return", "median_2y_return", "avg_3y_return", "median_3y_return", "hit_rate_2y_net", "hit_rate_3y_net"]:
+                  if c in tmp.columns:
+                      tmp[c] = tmp[c].apply(fmt_pct)
+              lines.append(md_table(tmp))
+          lines.append("")
+
+          lines.append("## Selected Entry Windows")
+          lines.append("")
+          if history.empty:
+              lines.append("_No selected entry windows._")
+          else:
+              show_cols = [c for c in [
+                  "ticker", "commodity_type", "index", "close", "rsi14",
+                  "drawdown_lookback", "drawdown_entry_th", "strong_buy",
+                  "window_open", "window_close", "window_days",
+                  "fwd_2y_return", "fwd_3y_return"
+              ] if c in history.columns]
+              tmp = history[show_cols].copy()
+              for c in ["drawdown_lookback", "drawdown_entry_th", "fwd_2y_return", "fwd_3y_return"]:
+                  if c in tmp.columns:
+                      tmp[c] = tmp[c].apply(fmt_pct)
+              lines.append(md_table(tmp.head(200)))
+          lines.append("")
+
+          lines.append("## Raw BUY Windows")
+          lines.append("")
+          if windows.empty:
+              lines.append("_No raw BUY windows._")
+          else:
+              show_cols = [c for c in [
+                  "ticker", "commodity_type", "index", "close", "rsi14",
+                  "drawdown_lookback", "drawdown_entry_th", "strong_buy",
+                  "fwd_2y_return", "fwd_3y_return"
+              ] if c in windows.columns]
+              tmp = windows[show_cols].copy()
+              for c in ["drawdown_lookback", "drawdown_entry_th", "fwd_2y_return", "fwd_3y_return"]:
+                  if c in tmp.columns:
+                      tmp[c] = tmp[c].apply(fmt_pct)
+              lines.append(md_table(tmp.head(200)))
+          lines.append("")
+
+          lines.append("## Active Profiles")
+          lines.append("")
+          if profiles.empty:
+              lines.append("_No profile data._")
+          else:
+              lines.append(md_table(profiles))
+
+          report_md.write_text("\n".join(lines), encoding="utf-8")
+
+          stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+          archive_run_dir = archive_dir / stamp
+          archive_run_dir.mkdir(parents=True, exist_ok=True)
+
+          for p in [summary_csv, latest_csv, history_csv, windows_csv, profiles_csv, report_md]:
+              if p.exists():
+                  shutil.copy2(p, archive_run_dir / p.name)
+
+          print(f"Wrote markdown report: {report_md}")
+          print(f"Archived commodity run to: {archive_run_dir}")
+          PY
+
+      - name: Debug commodity outputs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "=== reports/latest/commodity_entry ==="
+          ls -la reports/latest/commodity_entry || true
+          echo "=== reports/archive/commodity_entry ==="
+          ls -la reports/archive/commodity_entry || true
+          echo "=== latest commodity report ==="
+          cat reports/latest/commodity_entry/commodity_entry_report.md || true
+
       - name: Run consolidated backtest report
         shell: bash
         run: |
@@ -388,6 +598,8 @@ jobs:
           ls -la reports/latest/daily_dashboard || true
           echo "=== reports/latest/etf_entry ==="
           ls -la reports/latest/etf_entry || true
+          echo "=== reports/latest/commodity_entry ==="
+          ls -la reports/latest/commodity_entry || true
           echo "=== reports/archive/daily_dashboard ==="
           ls -la reports/archive/daily_dashboard || true
           echo "=== latest dashboard summary ==="
@@ -409,7 +621,7 @@ jobs:
             exit 0
           fi
 
-          git commit -m "Live nightly refresh: data + ETF + backtest + dashboard [skip ci]"
+          git commit -m "Live nightly refresh: data + ETF + commodity + backtest + dashboard [skip ci]"
           git push origin "${GITHUB_REF_NAME:-main}"
 
       - name: Upload outputs as artifact
