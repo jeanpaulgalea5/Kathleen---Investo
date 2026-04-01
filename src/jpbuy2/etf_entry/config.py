@@ -39,14 +39,16 @@ class ETFEntrySettings:
 
     # Grace BUY floor: current drawdown must still be at least this fraction of
     # the threshold when using the grace window. Prevents entries on fully healed dips.
-    # e.g. 0.5 means current drawdown must still be >= 50% of threshold.
     grace_buy_min_ratio: float = 0.5
 
-    # PRIMED floor: current drawdown must be at least this fraction of the threshold
-    # for PRIMED to remain active. Below this, the dip has healed enough that the
-    # alert is no longer meaningful — PRIMED expires back to WATCH.
-    # e.g. 0.75 means PRIMED cancels when drawdown recovers to below 75% of threshold.
+    # PRIMED floor: PRIMED expires when current drawdown heals below this fraction
+    # of the threshold. At that point the dip is over and the alert is stale.
     primed_min_ratio: float = 0.75
+
+    # Buy window: once a BUY fires, the signal stays open as BUY for up to this
+    # many bars AS LONG AS drawdown_gate_live is still True (overshoot >= 1x).
+    # The primary expiry is the drawdown healing — this is just a safety cap.
+    buy_window_days: int = 20
 
     # Optional RSI support: used for scoring/reporting only, not as a hard gate.
     rsi_support_quantile: float = 0.60
@@ -65,6 +67,7 @@ class ETFEntrySettings:
             "drawdown_grace_days": 5,
             "grace_buy_min_ratio": 0.5,
             "primed_min_ratio": 0.75,
+            "buy_window_days": 20,
             "rsi_support_quantile": 0.60,
             "require_bullish_day": True,
             "cooldown_days": 12,
