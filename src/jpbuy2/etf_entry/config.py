@@ -32,6 +32,22 @@ class ETFEntrySettings:
     # of that ETF's own prior positive 20d pullbacks.
     drawdown_entry_quantile: float = 0.65
 
+    # Grace window: if drawdown was above threshold within this many bars ago,
+    # still allow a MACD cross-up to fire a BUY. Prevents missing entries when
+    # price partially recovers before MACD confirms.
+    drawdown_grace_days: int = 5
+
+    # Grace BUY floor: current drawdown must still be at least this fraction of
+    # the threshold when using the grace window. Prevents entries on fully healed dips.
+    # e.g. 0.5 means current drawdown must still be >= 50% of threshold.
+    grace_buy_min_ratio: float = 0.5
+
+    # PRIMED floor: current drawdown must be at least this fraction of the threshold
+    # for PRIMED to remain active. Below this, the dip has healed enough that the
+    # alert is no longer meaningful — PRIMED expires back to WATCH.
+    # e.g. 0.75 means PRIMED cancels when drawdown recovers to below 75% of threshold.
+    primed_min_ratio: float = 0.75
+
     # Optional RSI support: used for scoring/reporting only, not as a hard gate.
     rsi_support_quantile: float = 0.60
 
@@ -46,6 +62,9 @@ class ETFEntrySettings:
         default_factory=lambda: {
             "adaptive_lookback_days": 504,
             "drawdown_entry_quantile": 0.65,
+            "drawdown_grace_days": 5,
+            "grace_buy_min_ratio": 0.5,
+            "primed_min_ratio": 0.75,
             "rsi_support_quantile": 0.60,
             "require_bullish_day": True,
             "cooldown_days": 12,
