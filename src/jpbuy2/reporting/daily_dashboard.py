@@ -1596,6 +1596,7 @@ def _build_html(
     holdings_view_df: pd.DataFrame,
     audit: dict[str, Any],
     recon_df: pd.DataFrame,
+    commodity_df: pd.DataFrame | None = None,
 ) -> str:
     held_tickers: set[str] = set()
 
@@ -1697,14 +1698,30 @@ def _build_html(
     armed_count = int((monitor_df["Status"] == "ARMED").sum()) if not monitor_df.empty else 0
     buy_count = int(len(buy_df)) if 'buy_df' in locals() else 0
     in_pos_count = int((monitor_df["Status"] == "IN_POS").sum()) if not monitor_df.empty else 0
+        # ── Commodity signals ─────────────────────────────────────────────
+    commodity_active_df = pd.DataFrame()
+    commodity_primed_df = pd.DataFrame()
+    if commodity_df is not None and not commodity_df.empty and "signal" in commodity_df.columns:
+        commodity_active_df = commodity_df[
+            commodity_df["signal"].isin(["STRONG_BUY", "BUY"])
+        ].copy()
+        commodity_primed_df = commodity_df[
+            commodity_df["signal"] == "PRIMED"
+        ].copy()
+
     stock_buy_count = int(len(stock_buy_df)) if 'stock_buy_df' in locals() else 0
+    
     etf_buy_count = int(len(etf_buy_df)) if 'etf_buy_df' in locals() else 0
     etf_add_count = int(len(etf_add_df)) if 'etf_add_df' in locals() else 0
     primed_etf_count = int(len(primed_etf_df)) if 'primed_etf_df' in locals() else 0
 
+    commodity_active_count = int(len(commodity_active_df))
+    commodity_primed_count = int(len(commodity_primed_df))
+
     chips = [
         ("Watchlist", str(len(monitor_df))),
         ("BUY", str(buy_count)),
+        ("Commodity BUY", str(commodity_active_count)),
         ("BUY Stocks", str(stock_buy_count)),
         ("BUY ETFs", str(etf_buy_count)),
         ("ETF Adds", str(etf_add_count)),
@@ -1764,6 +1781,18 @@ def _build_html(
         "Latest Exit Reason",
     ]
 
+    commodity_cols = [
+        "ticker",
+        "commodity_type",
+        "signal",
+        "close",
+        "rsi14",
+        "drawdown",
+        "drawdown_entry_th",
+        "drawdown_overshoot_x",
+        "drawdown_overshoot_label",
+        "structural_bull",
+    ]
     exit_action_cols = [
         "Ticker",
         "Name",
@@ -1854,6 +1883,7 @@ def _build_html(
         etf_buy_df is not None and not etf_buy_df.empty,
         etf_add_df is not None and not etf_add_df.empty,
         primed_etf_df is not None and not primed_etf_df.empty,
+        not commodity_active_df.empty,
     ])
     has_blocked = blocked_df is not None and not blocked_df.empty
 
@@ -1881,8 +1911,7 @@ body{{font-family:Arial,Helvetica,sans-serif;background:#f6f8fb;color:#1f2937;ma
 .subcard h3{{margin:0 0 8px 0;font-size:16px;}}
 .subcard p{{margin:0 0 12px 0;font-size:13px;color:#4b5563;}}
 .subcard-exit{{border:2px solid #dc2626;background:#fef2f2;}}
-.subcard-buy{{border:1px solid #86efac;background:#f0fdf4;}}
-.subcard-blocked{{border:1px solid #fcd34d;background:#fffbeb;}}
+.subcard-commodity{{border:1px solid #86efac;background:#f0fdf4;}}
 h1{{margin:0 0 6px 0;font-size:28px;}}
 h2{{margin:0 0 12px 0;font-size:19px;}}
 h3{{margin:18px 0 10px 0;font-size:15px;}}
@@ -1908,6 +1937,18 @@ th{{background:#f9fafb;position:sticky;top:0;}}
 .legend{{margin-top:12px;padding:12px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;}}
 .legend ul{{margin:8px 0 0 18px;padding:0;}}
 .legend li{{margin:4px 0;}}
+.group-stocks{{border:2px solid #86efac;border-radius:14px;padding:14px 16px;margin-bottom:4px;background:#f0fdf4;}}
+.group-etfs{{border:2px solid #bfdbfe;border-radius:14px;padding:14px 16px;margin-bottom:4px;background:#eff6ff;}}
+.group-commodity{{border:2px solid #fcd34d;border-radius:14px;padding:14px 16px;margin-bottom:4px;background:#fffbeb;}}
+.group-label{{display:block;font-size:17px;font-weight:700;text-decoration:underline;text-transform:uppercase;letter-spacing:0.04em;margin:0 0 12px 2px;padding-bottom:4px;}}
+.group-stocks .group-label{{color:#15803d;}}
+.group-etfs .group-label{{color:#1d4ed8;}}
+.group-commodity .group-label{{color:#b45309;}}
+.group-stocks .subcard{{margin-bottom:10px;}}
+.group-etfs .subcard{{margin-bottom:10px;}}
+.group-commodity .subcard{{margin-bottom:10px;}}
+.subcard-buy{{border:1px solid #86efac;background:#f0fdf4;}}
+.subcard-blocked{{border:1px solid #fcd34d;background:#fffbeb;}}
 </style>
 </head>
 <body>
@@ -1920,52 +1961,80 @@ th{{background:#f9fafb;position:sticky;top:0;}}
 
   <div class=\"card section {action_panel_class}\">
   <h2>Action Panel</h2>
-  <div class=\"muted\">Top section separates urgent exits from fresh buys and blocked near-misses so the action type is immediately clear.</div>
+  <div class=\"muted\">Grouped by asset class. Stocks → ETFs → Commodities → Exits.</div>
 
   <div class=\"panel-grid\">
 
-    <div class=\"subcard subcard-exit\">
-      <h3>🚨 EXIT NOW holdings</h3>
-      <p>You already hold these positions. Review for immediate action.</p>
-      {_table_html(exit_now_df, exit_action_cols, 'No immediate exit actions today.')}
+    <div class=\"group-stocks\">
+      <span class=\"group-label\">Stocks</span>
+
+     <div class=\"subcard subcard-exit\">
+       <h3>🚨 EXIT NOW holdings</h3>
+       <p>You already hold these positions. Review for immediate action.</p>
+       {_table_html(exit_now_df, exit_action_cols, 'No immediate exit actions today.')}
+     </div>
+
+      <div class=\"subcard subcard-buy\">
+        <h3>✅ BUY candidates — Stocks</h3>
+        <p>You do not currently hold these stock names. These are fresh executable buys from the main strategy engine.</p>
+        {_table_html(stock_buy_df, stock_buy_cols, 'No stock BUY candidates today.')}
+      </div>
+
+      <div class=\"subcard subcard-blocked\">
+        <h3>⏳ Blocked set-ups — Stocks near-miss</h3>
+        <p>These are close but not actionable yet. Review the blocker before taking any entry decision.</p>
+        {_table_html(blocked_df, blocked_cols, 'No blocked set-ups today.')}
+      </div>
+
     </div>
 
-    <div class=\"subcard subcard-buy\">
-      <h3>✅ BUY candidates — Stocks</h3>
-      <p>You do not currently hold these stock names. These are fresh executable buys from the main strategy engine.</p>
-      {_table_html(stock_buy_df, stock_buy_cols, 'No stock BUY candidates today.')}
+    <div class=\"group-etfs\">
+      <span class=\"group-label\">ETFs</span>
+
+      <div class=\"subcard subcard-buy\">
+        <h3>✅ BUY candidates — ETFs</h3>
+        <p>You do not currently hold these ETF names. These are fresh ETF pullback opportunities not yet in the portfolio.</p>
+        {_table_html(etf_buy_df, etf_buy_cols, 'No fresh ETF BUY candidates today.')}
+      </div>
+
+      <div class=\"subcard subcard-buy\">
+        <h3>➕ ETF add opportunities</h3>
+        <p>These ETFs are already held, but the ETF entry engine currently shows a BUY, STRONG_BUY, or PRIMED add signal.</p>
+        {_table_html(etf_add_df, etf_buy_cols, 'No ETF add opportunities today.')}
+      </div>
+
+      <div class=\"subcard subcard-blocked\">
+        <h3>⚡ PRIMED ETFs — signal imminent</h3>
+        <p>Drawdown gate already met and MACD improving. BUY may fire on the next bar. Have capital ready.</p>
+        {_table_html(primed_etf_df, etf_buy_cols, 'No ETFs currently primed.')}
+      </div>
+
     </div>
 
-    <div class=\"subcard subcard-buy\">
-      <h3>✅ BUY candidates — ETFs</h3>
-      <p>You do not currently hold these ETF names. These are fresh ETF pullback opportunities not yet in the portfolio.</p>
-      {_table_html(etf_buy_df, etf_buy_cols, 'No fresh ETF BUY candidates today.')}
+    <div class=\"group-commodity\">
+      <span class=\"group-label\">Commodities</span>
+
+      <div class=\"subcard subcard-buy\">
+        <h3>🥇 Commodity entry signals — BUY / STRONG BUY</h3>
+        <p>Live signals from the commodity entry engine. STRONG_BUY = exceptional dip bypass active. Check the commodity entry report for full detail.</p>
+        {_table_html(commodity_active_df, commodity_cols, 'No commodity BUY or STRONG_BUY signals today.')}
+      </div>
+
+      <div class=\"subcard subcard-blocked\">
+        <h3>⏳ Commodity — PRIMED (signal imminent)</h3>
+        <p>Drawdown gate met but awaiting weekly momentum confirmation. Monitor closely.</p>
+        {_table_html(commodity_primed_df, commodity_cols, 'No commodity signals currently primed.')}
+      </div>
+
     </div>
 
-    <div class=\"subcard subcard-buy\">
-      <h3>➕ ETF add opportunities</h3>
-      <p>These ETFs are already held, but the ETF entry engine currently shows a BUY, STRONG_BUY, or PRIMED add signal.</p>
-      {_table_html(etf_add_df, etf_buy_cols, 'No ETF add opportunities today.')}
-    </div>
-
-    <div class=\"subcard subcard-blocked\">
-      <h3>⚡ PRIMED ETFs — signal imminent</h3>
-      <p>Drawdown gate already met and MACD improving. BUY may fire on the next bar. Have capital ready.</p>
-      {_table_html(primed_etf_df, etf_buy_cols, 'No ETFs currently primed.')}
-    </div>
-
-    <div class=\"subcard subcard-blocked\">
-      <h3>⏳ Blocked set-ups</h3>
-      <p>These are close, but not actionable yet. Review the blocker before taking any entry decision.</p>
-      {_table_html(blocked_df, blocked_cols, 'No blocked set-ups today.')}
-    </div>
+    
 
   </div>
 
   {_entry_zone_legend_html()}
 
 </div>
-
   <div class=\"card section\">
     <h2>Exit Monitor</h2>
     <div class=\"muted\">All currently held watchlist positions. Immediate exits are surfaced above in the action panel.</div>
@@ -2350,7 +2419,7 @@ def generate_daily_dashboard(
 
     if not exit_holdings_df.empty and "Type" in exit_holdings_df.columns:
         exit_holdings_df = exit_holdings_df[
-            ~exit_holdings_df["Type"].astype(str).str.strip().str.upper().isin({"ETF", "GOLDETF"})
+            ~exit_holdings_df["Type"].astype(str).str.strip().str.upper().isin({"ETF", "GOLDETF", "COMMODITY"})
         ].copy()
 
     exit_df = build_exit_monitor(exit_holdings_df, monitor_df)
@@ -2478,7 +2547,16 @@ def generate_daily_dashboard(
         else 0
     )
 
-    html = _build_html(monitor_df, exit_df, holdings_view_df, audit, recon_df)
+    # Load latest commodity signals
+    _commodity_df = pd.DataFrame()
+    _commodity_path = Path("reports/latest/commodity_entry/commodity_entry_latest.csv")
+    if _commodity_path.exists():
+        try:
+            _commodity_df = pd.read_csv(_commodity_path)
+        except Exception:
+            _commodity_df = pd.DataFrame()
+
+    html = _build_html(monitor_df, exit_df, holdings_view_df, audit, recon_df, commodity_df=_commodity_df)
     
     html_latest = out_path / "daily_dashboard.html"
     csv_latest = out_path / "daily_dashboard_monitor.csv"
