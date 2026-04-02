@@ -35,7 +35,79 @@ except Exception:  # pragma: no cover
 
 TZ_DISPLAY = "Europe/Malta"
 
+def _load_commodity_targets(data_dir: str):
+    import pandas as pd
+    import os
 
+    path = os.path.join(data_dir, "commodities_targets.csv")
+    if not os.path.exists(path):
+        return {}
+
+    df = pd.read_csv(path)
+    df["ticker"] = df["ticker"].astype(str).str.upper().str.strip()
+
+    return dict(zip(df["ticker"], df["target_usd"]))
+
+def _market_data_ticker(ticker: str, asset_type: str) -> str:
+    t = str(ticker or "").strip().upper()
+    at = str(asset_type or "").strip().lower()
+
+    if at == "commodity":
+        if t == "XAU":
+            return "GC=F"
+        if t == "XAG":
+            return "SI=F"
+
+    return t
+
+
+def _is_eur_quoted_metal_internal_code(ticker: str, asset_type: str, currency: str) -> bool:
+    t = str(ticker or "").strip().upper()
+    at = str(asset_type or "").strip().lower()
+    ccy = str(currency or "").strip().upper()
+
+    return at == "commodity" and t in {"XAU", "XAG"} and ccy == "EUR"
+
+def _fetch_usd_to_eur_rate(
+    *,
+    data_dir: str,
+    start: str,
+    end: str | None,
+) -> Optional[float]:
+    try:
+        fx_df = fetch_ohlcv("EURUSD=X", start=start, end=end, interval="1d", data_dir=data_dir)
+        if fx_df is None or fx_df.empty:
+            return None
+
+        eurusd = _safe_float(fx_df["close"].iloc[-1])
+        if eurusd is None or eurusd <= 0:
+            return None
+
+        return 1.0 / eurusd
+    except Exception:
+        return None
+
+def _normalise_metal_price_for_holding_currency(
+    *,
+    ticker: str,
+    asset_type: str,
+    currency: str,
+    price: Any,
+    target_price: Any,
+    usd_to_eur: Any,
+) -> tuple[Optional[float], Optional[float]]:
+    px = _safe_float(price)
+    tp = _safe_float(target_price)
+    fx = _safe_float(usd_to_eur)
+
+    if _is_eur_quoted_metal_internal_code(ticker, asset_type, currency):
+        if fx is None or fx <= 0:
+            return px, tp
+        px = (px * fx) if px is not None else None
+        tp = (tp * fx) if tp is not None else None
+
+    return px, tp
+    
 def _tz() -> timezone:
     if ZoneInfo is None:
         return timezone.utc
@@ -1385,7 +1457,7 @@ def _reconciliation_summary_html(recon_df: pd.DataFrame) -> str:
     <div class="card section">
       <h2>Backtest Reconciliation</h2>
       <div class="muted">
-        TThis section checks the latest dashboard state against the latest row per ticker in reports/latest/backtest_windows.csv.
+        This section checks the latest dashboard state against the latest row per ticker in reports/latest/backtest_windows.csv.
         Golden is treated as ON when the latest backtest row has Golden ON populated and Golden OFF blank.
         Backtest Silver is treated as ON when the latest backtest row has Silver Entry Date populated and either Exit Date is blank or Exit Reason = BACKTEST_END.
       </div>
@@ -1653,7 +1725,12 @@ def _build_html(
         buy_df["Win Rate last 3 Years"].astype(str).str.replace("%", "", regex=False),
         errors="coerce",
     )
-    buy_df = buy_df[buy_df["_win_rate_3y_num"].fillna(0) >= 60.0].copy()
+
+    buy_df = buy_df[
+        (buy_df["Type"] != "STOCK")
+        | (buy_df["_win_rate_3y_num"].fillna(0) >= 55.0)
+    ].copy()
+
     buy_df = buy_df.drop(columns=["_win_rate_3y_num"], errors="ignore")
 
     # Fresh stock / ETF buys that are NOT currently held
@@ -1903,6 +1980,11 @@ def _build_html(
         "Quantity",
         "Currency",
         "Net Cost",
+        "Price",
+        "Target Price",
+        "Prudent Target",
+        "Prudent Upside %",
+        "Target Status",
     ]
 
     audit_rows = "".join(
@@ -2136,6 +2218,8 @@ def _build_monitor_row(
     target_price: Any = None,
     held_tickers: set[str] | None = None,
 ) -> dict[str, Any]:
+    source_ticker = _market_data_ticker(ticker, asset_type)
+    
     if _is_non_gold_etf(asset_type=asset_type, ticker=ticker, name=name):
         return _build_etf_monitor_row(
             data_dir=data_dir,
@@ -2148,8 +2232,8 @@ def _build_monitor_row(
             held_tickers=held_tickers,
         )
 
-    df_w = fetch_ohlcv(ticker, start=start, end=end, interval="1wk", data_dir=data_dir)
-    df_d = fetch_ohlcv(ticker, start=start, end=end, interval="1d", data_dir=data_dir)
+    df_w = fetch_ohlcv(source_ticker, start=start, end=end, interval="1wk", data_dir=data_dir)
+    df_d = fetch_ohlcv(source_ticker, start=start, end=end, interval="1d", data_dir=data_dir)
 
     asset_type_norm = str(asset_type or "").strip().lower()
     strategy_used = ""
@@ -2286,12 +2370,37 @@ def _build_monitor_row(
     )
 
     raw_target_price = _safe_float(target_price)
-    display_price = _normalise_price_for_display_and_target(
+
+    commodity_targets = _load_commodity_targets(data_dir)
+    if str(asset_type).strip().lower() == "commodity":
+        tkr = str(ticker).strip().upper()
+        if tkr in commodity_targets:
+            raw_target_price = commodity_targets[tkr]
+    
+    usd_to_eur = _fetch_usd_to_eur_rate(
+        data_dir=data_dir,
+        start=start,
+        end=end,
+    )
+
+    
+    price_ccy_norm, target_ccy_norm = _normalise_metal_price_for_holding_currency(
         ticker=ticker,
+        asset_type=asset_type,
         currency=currency,
         price=price,
         target_price=raw_target_price,
+        usd_to_eur=usd_to_eur,
     )
+
+    display_price = _normalise_price_for_display_and_target(
+        ticker=ticker,
+        currency=currency,
+        price=price_ccy_norm,
+        target_price=target_ccy_norm,
+    )
+    raw_target_price = target_ccy_norm
+
     prudent_target = _prudent_target(raw_target_price, haircut=0.04)
     prudent_upside_pct = _upside_pct(display_price, prudent_target)
     target_status = _target_status(prudent_upside_pct)
@@ -2449,13 +2558,41 @@ def generate_daily_dashboard(
     
     holdings_view_df = current_holdings_df.copy()
     if not holdings_view_df.empty:
+        holdings_view_df = holdings_view_df.merge(
+            monitor_df[
+                [
+                    "Ticker",
+                    "Price",
+                    "Target Price",
+                    "Prudent Target",
+                    "Prudent Upside %",
+                    "Target Status",
+                ]
+            ],
+            on="Ticker",
+            how="left",
+        )
+
         holdings_view_df["Quantity"] = holdings_view_df["Quantity"].map(_fmt_qty)
         holdings_view_df["Net Cost"] = holdings_view_df.apply(
             lambda r: _fmt_cost(r.get("Net Cost"), r.get("Currency", "")),
             axis=1,
         )
+
         holdings_view_df = holdings_view_df[
-            ["Ticker", "Name", "Platform", "Quantity", "Currency", "Net Cost"]
+            [
+                "Ticker",
+                "Name",
+                "Platform",
+                "Quantity",
+                "Currency",
+                "Net Cost",
+                "Price",
+                "Target Price",
+                "Prudent Target",
+                "Prudent Upside %",
+                "Target Status",
+            ]
         ].copy()
 
     exit_holdings_df = current_holdings_df.copy()
@@ -2468,10 +2605,32 @@ def generate_daily_dashboard(
     exit_df = build_exit_monitor(exit_holdings_df, monitor_df)
     if not exit_df.empty:
         exit_df = exit_df.drop(columns=["Name"], errors="ignore").merge(
-            monitor_df[["Ticker", "Name"]],
+            monitor_df[
+                [
+                    "Ticker",
+                    "Name",
+                    "Price",
+                    "Target Price",
+                    "Prudent Target",
+                    "Prudent Upside %",
+                ]
+            ],
             on="Ticker",
             how="left",
+            suffixes=("", "_mon"),
         )
+
+        for col in ["Price", "Target Price", "Prudent Target", "Prudent Upside %"]:
+            mon_col = f"{col}_mon"
+            if mon_col in exit_df.columns:
+                if col not in exit_df.columns:
+                    exit_df[col] = exit_df[mon_col]
+                else:
+                    exit_df[col] = exit_df[col].where(
+                        exit_df[col].astype(str).str.strip() != "",
+                        exit_df[mon_col],
+                    )
+                exit_df = exit_df.drop(columns=[mon_col], errors="ignore")
         
         exit_df["P/L %"] = exit_df.apply(
             lambda r: _fmt_pct(
@@ -2550,7 +2709,18 @@ def generate_daily_dashboard(
             if str(x).strip()
         }
 
-    buy_candidates_count = int(len(unheld_buy_df)) if 'unheld_buy_df' in locals() else 0
+    buy_candidates_count = int(
+        (
+            (monitor_df["Status"] == "BUY")
+            & (
+                ~monitor_df["Ticker"]
+                .astype(str)
+                .str.strip()
+                .str.upper()
+                .isin(held_tickers)
+            )
+        ).sum()
+    ) if not monitor_df.empty else 0
 
     audit = {
         "generated_at_local": now_local.strftime("%d/%m/%Y %H:%M:%S"),
