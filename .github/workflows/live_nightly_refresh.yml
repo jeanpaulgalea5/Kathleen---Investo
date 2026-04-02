@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
   schedule:
     # Same UTC time pattern as JP-BUY nightly pipeline.
-    # 02:00 UTC = 03:00 Malta in winter / 04:00 Malta in summer.
-    - cron: "0 2 * * 2-6"
+    # 01:00 UTC = 02:00 Malta in winter / 03:00 Malta in summer.
+    - cron: "0 1 * * 2-6"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
