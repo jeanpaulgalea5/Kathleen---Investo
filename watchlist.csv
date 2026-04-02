@@ -68,4 +68,6 @@ ORCL,stock,,,Revolut,ORCL,"Oracle",USD,175.86,
 UPS,stock,,,Revolut,UPS,"United Parcel Service",USD,118.53,
 BKNG,stock,,,Revolut,BKNG,"Booking",USD,5066,
 WDH1.HA,stock,,,Revolut,WDH1.HA,"Dermant AS",Euro,33.7,
-
+EVK.DE,stock,,,Revolut,EVK.DE,"Evonik",Euro,8.35,
+XAG,commodity,,,Revolut,XAG,Silver,EUR,,Silver
+XAU,commodity,,,Revolut,XAU,Gold,EUR,,Gold
