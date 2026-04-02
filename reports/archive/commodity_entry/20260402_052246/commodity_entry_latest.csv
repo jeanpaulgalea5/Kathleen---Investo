@@ -1,0 +1,2 @@
+ticker,commodity_type,date,signal,close,rsi14,drawdown,drawdown_entry_th,drawdown_overshoot_x,drawdown_overshoot_label,macd_hist,structural_bull,primed,reason
+XAD5.MI,gold,2026-03-31,STRONG_BUY,383.0,43.79993102265287,0.1108119001901707,0.04504609078950882,2.46,exceptional,-3.007676767132618,True,False,"commodity_type=gold, structural_bull, deep_dip, turn_confirm, rsi14=43.80, dd=0.111, dd_th=0.045"

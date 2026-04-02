@@ -1,0 +1,2 @@
+ticker,commodity_type,signals,entry_cost_pct,avg_2y_return,median_2y_return,avg_3y_return,median_3y_return,hit_rate_2y_net,hit_rate_3y_net,avg_days_between
+XAD5.MI,gold,15,0.0,0.1014634694980467,0.0781528325784222,0.2476550454220062,0.2266237002307906,1.0,1.0,326.14285714285717

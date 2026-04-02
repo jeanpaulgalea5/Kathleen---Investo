@@ -1,9 +1,9 @@
 {
-  "watchlist_count": 70,
-  "success_count": 70,
+  "watchlist_count": 69,
+  "success_count": 69,
   "failure_count": 0,
-  "stale_count": 4,
+  "stale_count": 3,
   "failed_tickers": [],
   "start": "2010-01-01",
-  "end": "2026-04-02"
+  "end": "2026-04-03"
 }
