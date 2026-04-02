@@ -168,6 +168,38 @@ def compute_commodity_entry_features(
 
     out["weekly_gate_gold"] = weekly_gate_gold.reindex(out.index, method="ffill").fillna(False)
 
+    # ── Silver-specific weekly gate ──────────────────────────────────────────
+    # Silver's weekly MACD can stay negative for extended periods even during
+    # structural bull phases (high industrial-demand volatility).  We therefore
+    # accept any N-week MACD improvement OR positive MACD, with a more lenient
+    # RSI cap and a deeper minimum drawdown requirement.
+    _silver_weekly_rsi_cap_frac = float(profile.get("silver_weekly_rsi_cap_frac", 0.70))
+    _silver_weekly_macd_lookback = int(profile.get("silver_weekly_macd_lookback", 2))
+    _silver_weekly_deep_dip_min = float(profile.get("silver_weekly_deep_dip_min", 0.12))
+
+    weekly_rsi_cap_silver = _rolling_min_max_cap(weekly_rsi, lookback=156, frac=_silver_weekly_rsi_cap_frac)
+    weekly_macd_improving_silver = weekly_macd_hist > weekly_macd_hist.shift(_silver_weekly_macd_lookback)
+    weekly_deep_dip_silver = weekly_drawdown_12w >= _silver_weekly_deep_dip_min
+
+    weekly_gate_silver = (
+        ((weekly_macd_hist > 0) | weekly_macd_improving_silver.fillna(False))
+        & (weekly_rsi <= weekly_rsi_cap_silver)
+        & weekly_deep_dip_silver
+    )
+
+    out["weekly_gate_silver"] = weekly_gate_silver.reindex(out.index, method="ffill").fillna(False)
+
+    # ── Silver-specific turn confirmation ────────────────────────────────────
+    # Silver turns faster and with more noise than gold.  We use an adaptive
+    # RSI cap (wider lookback fraction) and require only that MACD hist is
+    # improving vs yesterday — not the stricter slope-cross-up used by default.
+    _silver_adaptive_rsi_frac = float(profile.get("silver_adaptive_rsi_cap_frac", 0.78))
+    daily_rsi_cap_silver = _rolling_min_max_cap(out["rsi14"], lookback=252, frac=_silver_adaptive_rsi_frac)
+    out["turn_confirm_silver"] = (
+        out["macd_improving"].fillna(False)
+        & (out["rsi14"] <= daily_rsi_cap_silver)
+    ).fillna(False)
+
     bullish_ok = out["bullish_day"] if require_bullish_day else True
 
     out["deep_dip"] = (
@@ -191,8 +223,9 @@ def compute_commodity_entry_features(
 
     ctype = str(profile.get("commodity_type", commodity_type or "generic")).strip().lower()
     is_gold = ctype == "gold"
+    is_silver = ctype == "silver"
 
-    # ─── REPLACEMENT CODE ───
+    # ─── GOLD BRANCH ───
     if is_gold:
         out["turn_confirm"] = out["turn_confirm_gold"]
 
@@ -219,6 +252,40 @@ def compute_commodity_entry_features(
             & out["deep_dip"]
             & ~out["buy_gate"]
         ).fillna(False)
+
+    # ─── SILVER BRANCH ───
+    elif is_silver:
+        out["turn_confirm"] = out["turn_confirm_silver"]
+
+        _silver_exceptional_multiplier = float(
+            profile.get("silver_exceptional_dip_multiplier", 1.8)
+        )
+
+        # Silver exceptional dip bypass:
+        # Lower multiplier than gold (1.8x vs 2.0x) because silver swings are
+        # structurally larger.  Does NOT require structural_bull — deeply
+        # oversold silver at extreme drawdown is a valid standalone entry even
+        # when the weekly trend has not yet turned.
+        exceptional_dip_silver = (
+            out["deep_dip"]
+            & out["turn_confirm"]
+            & (out["drawdown_lookback"] >= out["drawdown_entry_th"] * _silver_exceptional_multiplier)
+        ).fillna(False)
+
+        out["buy_gate"] = (
+            (out["weekly_gate_silver"].fillna(False) | exceptional_dip_silver)
+            & out["deep_dip"]
+            & out["turn_confirm"]
+        ).fillna(False)
+
+        out["primed"] = (
+            (out["weekly_gate_silver"].fillna(False) | exceptional_dip_silver)
+            & out["deep_dip"]
+            & out["macd_improving"].fillna(False)
+            & ~out["buy_gate"]
+        ).fillna(False)
+
+    # ─── GENERIC BRANCH ───
     else:
         out["turn_confirm"] = out["turn_confirm_default"]
         out["buy_gate"] = (
@@ -287,6 +354,8 @@ def latest_commodity_signal(
         reasons.append("structural_bull")
     if bool(row.get("weekly_gate_gold", False)):
         reasons.append("weekly_gate_gold")
+    if bool(row.get("weekly_gate_silver", False)):
+        reasons.append("weekly_gate_silver")
     if bool(row.get("exceptional_dip", False)):
         reasons.append("exceptional_dip_bypass")
     if bool(row.get("deep_dip", False)):
@@ -332,6 +401,7 @@ def latest_commodity_signal(
         "macd_hist": float(row["macd_hist"]) if pd.notna(row["macd_hist"]) else None,
         "structural_bull": bool(row.get("structural_bull", False)),
         "weekly_gate_gold": bool(row.get("weekly_gate_gold", False)),
+        "weekly_gate_silver": bool(row.get("weekly_gate_silver", False)),
         "primed": bool(row.get("primed", False)),
         "reason": ", ".join(reasons),
     }
