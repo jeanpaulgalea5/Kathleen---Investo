@@ -1,9 +1,18 @@
 {
-  "watchlist_count": 69,
-  "success_count": 69,
-  "failure_count": 0,
-  "stale_count": 3,
-  "failed_tickers": [],
+  "watchlist_count": 72,
+  "success_count": 70,
+  "failure_count": 2,
+  "stale_count": 18,
+  "failed_tickers": [
+    {
+      "ticker": "XAG",
+      "error": "Failed to fetch OHLCV for XAG=X interval=1d. Yahoo error was: ValueError('No data returned for XAG=X interval=1d (attempt 3)'). Yahoo HTTP fallback error was: ValueError('Yahoo HTTP chart request failed for XAG=X: HTTP Error 404: Not Found'). Stooq fallback error was: EmptyDataError('No columns to parse from file')."
+    },
+    {
+      "ticker": "XAU",
+      "error": "NDFrame.fillna() got an unexpected keyword argument 'method'"
+    }
+  ],
   "start": "2010-01-01",
-  "end": "2026-04-03"
+  "end": "2026-04-04"
 }
