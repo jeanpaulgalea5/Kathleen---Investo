@@ -257,19 +257,61 @@ def _daily_to_weekly(df_d: pd.DataFrame) -> pd.DataFrame:
     # partial data and must NOT be used for Golden signals or backtests.
     # Using a Monday-only bar as a "weekly close" causes false Golden
     # ON/OFF flips mid-week, as seen with INTU on 2026-03-30.
+    #
+    # FIX: changed > to >= so that Friday-morning runs also strip the bar.
+    # On Friday the W-FRI label equals today, so the old > guard was False
+    # and the incomplete bar survived. Using >= ensures it is always stripped
+    # until the week has fully closed (i.e. from the following Monday onwards).
     if not df_w.empty:
         import datetime
         today = datetime.date.today()
         last_bar_date = df_w.index[-1]
         if hasattr(last_bar_date, "date"):
             last_bar_date = last_bar_date.date()
-        # The bar is incomplete if its label (the coming Friday) is still in the future
-        if last_bar_date > today:
+        # Strip if the bar's closing Friday has not yet fully passed
+        if last_bar_date >= today:
             df_w = df_w.iloc[:-1]
 
     df_w = _normalise(df_w)
     df_w = _index_to_naive_utc(df_w)
     return df_w
+
+
+def _strip_incomplete_weekly_bar(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Remove the current (incomplete) weekly bar from yfinance 1wk data.
+
+    yfinance labels weekly bars with the Monday (week-start date).
+    A weekly bar is only closed after its Friday has fully elapsed.
+    Until then the bar contains only partial OHLCV and must NOT be used
+    for Golden/Silver signal evaluation — doing so causes false ON/OFF
+    flips mid-week (e.g. Pirelli ON Thursday, OFF Friday morning).
+
+    Conservative rule: drop the last bar if today <= its closing Friday.
+    The bar is only included from the following Monday onwards, guaranteeing
+    it is fully closed regardless of what time the workflow runs.
+    """
+    import datetime
+    if df is None or df.empty:
+        return df
+
+    today = datetime.date.today()
+    last_bar_ts = df.index[-1]
+    last_bar_date = (
+        last_bar_ts.date()
+        if hasattr(last_bar_ts, "date")
+        else pd.Timestamp(last_bar_ts).date()
+    )
+
+    # weekday(): Monday=0 … Friday=4
+    days_to_friday = (4 - last_bar_date.weekday()) % 7
+    bar_close_friday = last_bar_date + datetime.timedelta(days=days_to_friday)
+
+    # Drop if the bar's closing Friday has not yet fully passed
+    if today <= bar_close_friday:
+        df = df.iloc[:-1]
+
+    return df
 
 
 def _fetch_yahoo_chart_http(
@@ -428,6 +470,12 @@ def fetch_ohlcv(
             if df.empty:
                 raise ValueError(f"Yahoo data empty after date filter for {ticker} interval={interval}")
 
+            # Strip the current incomplete weekly bar — yfinance includes the
+            # Monday-labelled open bar for the current week even when it has not
+            # yet closed, causing false Golden ON/OFF flips mid-week.
+            if interval == "1wk":
+                df = _strip_incomplete_weekly_bar(df)
+
             # Save FILTERED snapshot (actually used)
             if data_dir is not None and save_download_snapshots:
                 p_f = _snapshot_path(data_dir, interval, ticker, "filtered")
@@ -449,6 +497,10 @@ def fetch_ohlcv(
     # 2) Direct Yahoo HTTP chart fallback
     try:
         df = _fetch_yahoo_chart_http(ticker=ticker, start=start, end=end, interval=interval)
+
+        # Strip the current incomplete weekly bar from HTTP chart fallback too
+        if interval == "1wk":
+            df = _strip_incomplete_weekly_bar(df)
 
         if data_dir is not None and save_download_snapshots:
             p_f = _snapshot_path(data_dir, interval, ticker, "filtered_http_chart")
