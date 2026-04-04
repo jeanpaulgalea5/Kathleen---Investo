@@ -35,7 +35,7 @@ class Settings:
     golden_rsi_high_quantile: float = 0.85
     golden_min_weeks_on: int = 8
 
-    #-----Golden Rentry
+    # --- Golden re-entry ---
     golden_trailing_atr_mult: float = 1.4
     golden_enable_reentry_after_hard_exit: bool = True
     golden_reentry_window_weeks: int = 8
@@ -63,6 +63,8 @@ class Settings:
     confirm_macd_hist_improves: bool = True
     confirm_macd_slope_days: int = 2
 
+    silver_require_bullish_di: bool = False
+
     # MACD params used by silver.py
     silver_macd_fast: int = 12
     silver_macd_slow: int = 26
@@ -86,7 +88,6 @@ class Settings:
     silver_atr_cooldown_days: int = 3
     silver_adx_max: float = 30.0
     silver_require_adx_rising: bool = False
-    silver_require_bullish_di: bool = False   # S8_DI_GUARD: block entry when -DI >= +DI
 
     # --- Blockers ---
     blocker_lower_low_days: int = 2
@@ -104,23 +105,83 @@ class Settings:
     golden_ma_break_confirm_weeks: int = 1
     golden_trend_break_macd_neg_weeks: int = 1
 
-    # --- NEW: Intraday emergency exit overlay ---
-    # Keeps the current weekly Golden exit intact, but allows an early
-    # emergency exit if an open trade crashes hard intraday.
+    # --- Intraday emergency exit overlay ---
     use_intraday_emergency_exit: bool = False
     intraday_emergency_interval: str = "60m"
     intraday_emergency_stop_pct: float = 0.07
     intraday_emergency_use_low: bool = True
 
 
-def settings_for(asset_type: AssetType) -> Settings:
+def base_settings() -> Settings:
     return Settings()
 
+def settings_for_ticker(ticker: str, asset_type: AssetType) -> Settings:
+    """
+    General ticker-aware settings resolver.
 
-def settings_for_ticker(ticker: str, asset_type) -> 'Settings':
+    This is the single routing point for ticker-specific strategy selection.
+    It should remain general and production-safe:
+    - baseline for non-stock assets
+    - baseline fallback when adaptive selection cannot run
+    - adaptive selection for stocks with sufficient data
     """
-    Fallback: returns baseline Settings for any ticker.
-    The adaptive layer (settings_adaptive) in strategy_select.py
-    overrides this at runtime after data is loaded.
+
+    base = settings_for(asset_type)
+
+    if asset_type != "stock":
+        return base
+
+    try:
+        from .data.yahoo import fetch_ohlcv
+        from .strategy_select import settings_adaptive
+
+        df_w = fetch_ohlcv(
+            ticker,
+            start="2010-01-01",
+            end=None,
+            interval="1wk",
+            data_dir="data",
+        )
+        df_d = fetch_ohlcv(
+            ticker,
+            start="2010-01-01",
+            end=None,
+            interval="1d",
+            data_dir="data",
+        )
+
+        if len(df_d) >= 260:
+            return settings_adaptive(
+                ticker=ticker,
+                df_d=df_d,
+                df_w=df_w,
+                data_dir="data",
+                verbose=True,
+            )
+    except Exception:
+        pass
+
+    return base
+
+def compounder_hold_settings() -> Settings:
     """
-    return settings_for(asset_type)
+    S12_COMPOUNDER_HOLD
+    Purpose:
+    - strong trend / quality compounders
+    - slightly more patient Golden hold behaviour
+    - modestly wider trailing room
+    - slightly more MA40 break confirmation
+    """
+    return Settings(
+        golden_trailing_stop_pct=0.17,
+        golden_hard_stop_from_entry_pct=0.095,
+        golden_ma_break_confirm_weeks=2,
+        golden_trend_break_macd_neg_weeks=1,
+        golden_min_weeks_on=10,
+    )
+
+
+def settings_for(asset_type: AssetType) -> Settings:
+    # Keep current baseline untouched for now.
+    # New families should be routed explicitly in controlled tests.
+    return base_settings()
