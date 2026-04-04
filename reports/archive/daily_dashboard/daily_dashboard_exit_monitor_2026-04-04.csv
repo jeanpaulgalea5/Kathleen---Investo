@@ -1,0 +1,2 @@
+Ticker,Platform,Quantity,Currency,Net Cost,Price,1D %,Golden,Silver,Exit Signal,Status,Name,Target Price,Prudent Target,Prudent Upside %,P/L %,Exit Reason,Urgency,Conflict
+KO,revolut,3.0177,USD,$193.92,76.72,0.84%,OFF,VALID,TRAILING_STOP,EXIT NOW,Coca-Cola Co,72.46,69.56,-9.3%,19.4%,Trailing stop broken; weekly trend off,High,

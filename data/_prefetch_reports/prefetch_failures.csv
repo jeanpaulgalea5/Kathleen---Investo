@@ -1,3 +1,3 @@
 ticker,error
-XAG,Failed to fetch OHLCV for XAG=X interval=1d. Yahoo error was: ValueError('No data returned for XAG=X interval=1d (attempt 3)'). Yahoo HTTP fallback error was: ValueError('Yahoo HTTP chart request failed for XAG=X: HTTP Error 404: Not Found'). Stooq fallback error was: EmptyDataError('No columns to parse from file').
+XAG,"Failed to fetch OHLCV for XAG=X interval=1d. Yahoo error was: ValueError('No data returned for XAG=X interval=1d (attempt 3)'). Yahoo HTTP fallback error was: ValueError('Yahoo HTTP chart request failed for XAG=X: HTTP Error 404: Not Found'). Stooq fallback error was: ValueError(""Stooq CSV missing 'Date' column for XAG=X.US. Columns=['write to www@stooq.com if you want to use our data', 'describing your project', 'the types of instruments needed', 'and optionally providing the name of the website where the data would be published.']"")."
 XAU,NDFrame.fillna() got an unexpected keyword argument 'method'
