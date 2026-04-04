@@ -5,12 +5,11 @@ Adaptive per-ticker strategy selector for Investo.
 
 HOW IT WORKS
 ============
-1. On first call for a ticker, runs all 7 strategy profiles against
-   the full available history and picks the one with the highest
-   cumulative return.
-2. The result is cached to  data/strategy_cache/<TICKER>.json
-3. Cache is auto-invalidated when new daily bars have arrived
-   (mtime of the daily CSV > mtime of the cache file).
+1. On first call for a ticker, runs all configured strategy profiles against
+   the full available history and picks the one with the highest cumulative return.
+2. The result is cached to data/strategy_cache/<TICKER>.json
+3. Cache is auto-invalidated when the strategy fingerprint changes
+   (profiles, params, or hybrid selection constants).
 4. Any ticker — new or existing — is handled automatically.
    No hardcoded map. No manual maintenance.
 
@@ -56,6 +55,7 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
+import hashlib
 
 from .config import Settings
 from .backtest.engine import run_backtest
@@ -109,6 +109,15 @@ STRATEGY_PROFILES: dict[str, Settings] = {
     "S11_VOLATILE_FAST": replace(_BASE, golden_min_weeks_on=3, golden_trailing_atr_mult=0.9,
                                   golden_hard_stop_from_entry_pct=0.06,
                                   silver_max_dist_from_ma=0.05),
+    # S12_COMPOUNDER_HOLD: patient hold profile for strong trend / quality compounders
+    "S12_COMPOUNDER_HOLD": replace(
+        _BASE,
+        golden_min_weeks_on=10,
+        golden_trailing_stop_pct=0.17,
+        golden_hard_stop_from_entry_pct=0.095,
+        golden_ma_break_confirm_weeks=2,
+        golden_trend_break_macd_neg_weeks=1,
+    ),
     # S12: low-momentum recovery — wait for ADX confirmation, wider trail
     "S12_RECOVERY":    replace(_BASE, golden_min_weeks_on=6, golden_trailing_atr_mult=1.6,
                                 golden_rsi_entry_buffer=25.0, silver_adx_entry_min=18.0),
@@ -139,9 +148,17 @@ STRATEGY_PARAMS: dict[str, dict] = {
     "S11_VOLATILE_FAST": {"golden_min_weeks_on": 3, "golden_trailing_atr_mult": 0.9,
                            "golden_hard_stop_from_entry_pct": 0.06,
                            "silver_max_dist_from_ma": 0.05},
+     "S12_COMPOUNDER_HOLD": {
+         "golden_min_weeks_on": 10,
+         "golden_trailing_stop_pct": 0.17,
+         "golden_hard_stop_from_entry_pct": 0.095,
+         "golden_ma_break_confirm_weeks": 2,
+         "golden_trend_break_macd_neg_weeks": 1,},
+   
     "S12_RECOVERY":    {"golden_min_weeks_on": 6, "golden_trailing_atr_mult": 1.6,
                          "golden_rsi_entry_buffer": 25.0, "silver_adx_entry_min": 18.0},
 }
+
 
 
 # ---------------------------------------------------------------------------
@@ -162,17 +179,20 @@ def _daily_csv_path(ticker: str, data_dir: str) -> Path:
 
 def _cache_is_valid(ticker: str, data_dir: str) -> bool:
     """
-    Cache is valid as long as the file exists.
-    Strategy classification is based on years of history — one new daily bar
-    does not change which strategy is optimal. Cache is intentionally permanent.
-
-    Recomputes only when:
-      - Cache file does not exist (first run for this ticker)
-      - force=True passed to select_strategy()
-      - Cache file manually deleted
-      - warm_strategy_cache.py --force is run
+    Cache is valid only if:
+      - file exists
+      - it was computed under the current strategy fingerprint
     """
-    return _cache_path(ticker, data_dir).exists()
+    path = _cache_path(ticker, data_dir)
+    if not path.exists():
+        return False
+
+    try:
+        with path.open() as f:
+            cached = json.load(f)
+        return cached.get("fingerprint") == _strategy_fingerprint()
+    except Exception:
+        return False
 
 
 def _read_cache(ticker: str, data_dir: str) -> dict | None:
@@ -234,6 +254,26 @@ def _pick_best(cums: dict[str, float | None]) -> str:
 _HYBRID_3Y_THRESHOLD   = -0.10   # -10% cumulative on 3Y window triggers override
 _HYBRID_3Y_CUTOFF_DAYS = 3 * 365  # rolling 3-year window
 
+# ---------------------------------------------------------------------------
+# Cache versioning
+# ---------------------------------------------------------------------------
+
+_STRATEGY_CACHE_VERSION = "2026-04-04-v1"
+
+def _strategy_fingerprint() -> str:
+    """
+    Fingerprint the current strategy universe so stale caches are invalidated
+    whenever profiles or parameters change.
+    """
+    payload = {
+        "version": _STRATEGY_CACHE_VERSION,
+        "profiles": sorted(STRATEGY_PROFILES.keys()),
+        "params": STRATEGY_PARAMS,
+        "hybrid_3y_threshold": _HYBRID_3Y_THRESHOLD,
+        "hybrid_3y_cutoff_days": _HYBRID_3Y_CUTOFF_DAYS,
+    }
+    raw = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
 
 def _recent_cum(
     df_d: pd.DataFrame,
@@ -323,15 +363,21 @@ def select_strategy(
                     best_name = best_3y
 
     payload = {
-        "ticker":          ticker,
-        "best":            best_name,
-        "params":          STRATEGY_PARAMS.get(best_name, {}),
-        "cums":            {k: round(v * 100, 2) if v is not None else None
-                            for k, v in cums.items()},
-        "recent_cum_3y":   round(recent_cum_val * 100, 2) if recent_cum_val is not None else None,
-        "recent_override": recent_override,
-        "computed":        time.strftime("%Y-%m-%dT%H:%M:%S"),
-    }
+         "ticker":          ticker,
+         "best":            best_name,
+         "params":          STRATEGY_PARAMS.get(best_name, {}),
+         "cums":            {
+             k: round(v * 100, 2) if v is not None else None
+             for k, v in cums.items()
+         },
+         "recent_cum_3y":   round(recent_cum_val * 100, 2) if recent_cum_val is not None else None,
+         "recent_override": recent_override,
+         "computed":        time.strftime("%Y-%m-%dT%H:%M:%S"),
+         "cache_version":   _STRATEGY_CACHE_VERSION,
+         "fingerprint":     _strategy_fingerprint(),
+     }
+
+   
     _write_cache(ticker, data_dir, payload)
 
     return best_name, STRATEGY_PROFILES[best_name], payload["cums"]
