@@ -1,0 +1,31 @@
+{
+  "ticker": "FME.DE",
+  "best": "S5_COMBO",
+  "params": {
+    "golden_min_weeks_on": 12,
+    "golden_trailing_atr_mult": 2.0,
+    "golden_ma_break_confirm_weeks": 2
+  },
+  "cums": {
+    "S0_BASE": -7.44,
+    "S1_FAST": 17.55,
+    "S2_HOLD12": -7.92,
+    "S3_HOLD16": -5.8,
+    "S4_WIDEATR": -3.11,
+    "S5_COMBO": -0.34,
+    "S6_TIGHT": 17.55,
+    "S2_HOLD12_BUF": -5.76,
+    "S3_HOLD16_BUF": 9.0,
+    "S5_COMBO_BUF": -26.61,
+    "S8_DI_GUARD": 17.06,
+    "S8_DI_GUARD_BUF": 3.35,
+    "S11_VOLATILE_FAST": 11.17,
+    "S12_COMPOUNDER_HOLD": 9.7,
+    "S12_RECOVERY": 16.99
+  },
+  "recent_cum_3y": -11.22,
+  "recent_override": "S5_COMBO",
+  "computed": "2026-04-04T17:17:10",
+  "cache_version": "2026-04-04-v1",
+  "fingerprint": "c7acb1fc33ca35aba5054201b4330da8bddc62b28dec8d6f5708285a3d49502a"
+}

@@ -1,0 +1,30 @@
+{
+  "ticker": "AMP.MI",
+  "best": "S1_FAST",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0
+  },
+  "cums": {
+    "S0_BASE": 128.45,
+    "S1_FAST": 59.31,
+    "S2_HOLD12": 120.04,
+    "S3_HOLD16": 211.05,
+    "S4_WIDEATR": 67.25,
+    "S5_COMBO": 142.63,
+    "S6_TIGHT": 70.95,
+    "S2_HOLD12_BUF": 165.38,
+    "S3_HOLD16_BUF": 219.55,
+    "S5_COMBO_BUF": 253.94,
+    "S8_DI_GUARD": 54.18,
+    "S8_DI_GUARD_BUF": 121.15,
+    "S11_VOLATILE_FAST": 68.45,
+    "S12_COMPOUNDER_HOLD": 181.05,
+    "S12_RECOVERY": 4.96
+  },
+  "recent_cum_3y": -50.95,
+  "recent_override": "S1_FAST",
+  "computed": "2026-04-04T17:20:24",
+  "cache_version": "2026-04-04-v1",
+  "fingerprint": "c7acb1fc33ca35aba5054201b4330da8bddc62b28dec8d6f5708285a3d49502a"
+}

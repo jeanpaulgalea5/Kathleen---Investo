@@ -1,0 +1,33 @@
+{
+  "ticker": "BPCR.L",
+  "best": "S8_DI_GUARD_BUF",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0,
+    "silver_require_bullish_di": true,
+    "golden_rsi_entry_buffer": 30.0,
+    "golden_rsi_high_quantile": 0.92
+  },
+  "cums": {
+    "S0_BASE": -23.16,
+    "S1_FAST": -23.96,
+    "S2_HOLD12": -25.53,
+    "S3_HOLD16": -23.93,
+    "S4_WIDEATR": -27.57,
+    "S5_COMBO": -17.26,
+    "S6_TIGHT": -24.35,
+    "S2_HOLD12_BUF": -29.2,
+    "S3_HOLD16_BUF": -27.99,
+    "S5_COMBO_BUF": -21.54,
+    "S8_DI_GUARD": -21.82,
+    "S8_DI_GUARD_BUF": -15.13,
+    "S11_VOLATILE_FAST": -23.38,
+    "S12_COMPOUNDER_HOLD": -23.13,
+    "S12_RECOVERY": -22.9
+  },
+  "recent_cum_3y": -2.55,
+  "recent_override": null,
+  "computed": "2026-04-04T17:28:08",
+  "cache_version": "2026-04-04-v1",
+  "fingerprint": "c7acb1fc33ca35aba5054201b4330da8bddc62b28dec8d6f5708285a3d49502a"
+}

@@ -1,0 +1,33 @@
+{
+  "ticker": "FISV",
+  "best": "S8_DI_GUARD_BUF",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0,
+    "silver_require_bullish_di": true,
+    "golden_rsi_entry_buffer": 30.0,
+    "golden_rsi_high_quantile": 0.92
+  },
+  "cums": {
+    "S0_BASE": 84.33,
+    "S1_FAST": 95.34,
+    "S2_HOLD12": 134.87,
+    "S3_HOLD16": 116.56,
+    "S4_WIDEATR": 148.01,
+    "S5_COMBO": 227.98,
+    "S6_TIGHT": 72.68,
+    "S2_HOLD12_BUF": 173.67,
+    "S3_HOLD16_BUF": 150.35,
+    "S5_COMBO_BUF": 251.11,
+    "S8_DI_GUARD": 138.67,
+    "S8_DI_GUARD_BUF": 204.78,
+    "S11_VOLATILE_FAST": 128.94,
+    "S12_COMPOUNDER_HOLD": 112.2,
+    "S12_RECOVERY": 130.87
+  },
+  "recent_cum_3y": -25.37,
+  "recent_override": "S8_DI_GUARD_BUF",
+  "computed": "2026-04-04T17:29:27",
+  "cache_version": "2026-04-04-v1",
+  "fingerprint": "c7acb1fc33ca35aba5054201b4330da8bddc62b28dec8d6f5708285a3d49502a"
+}

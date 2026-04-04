@@ -1,0 +1,32 @@
+{
+  "ticker": "TEP.PA",
+  "best": "S12_RECOVERY",
+  "params": {
+    "golden_min_weeks_on": 6,
+    "golden_trailing_atr_mult": 1.6,
+    "golden_rsi_entry_buffer": 25.0,
+    "silver_adx_entry_min": 18.0
+  },
+  "cums": {
+    "S0_BASE": 227.05,
+    "S1_FAST": 127.92,
+    "S2_HOLD12": 257.41,
+    "S3_HOLD16": 251.79,
+    "S4_WIDEATR": 351.78,
+    "S5_COMBO": 251.52,
+    "S6_TIGHT": 109.98,
+    "S2_HOLD12_BUF": 290.7,
+    "S3_HOLD16_BUF": 271.74,
+    "S5_COMBO_BUF": 236.4,
+    "S8_DI_GUARD": 121.41,
+    "S8_DI_GUARD_BUF": 155.22,
+    "S11_VOLATILE_FAST": 111.54,
+    "S12_COMPOUNDER_HOLD": 218.26,
+    "S12_RECOVERY": 263.47
+  },
+  "recent_cum_3y": -40.0,
+  "recent_override": "S12_RECOVERY",
+  "computed": "2026-04-04T17:13:48",
+  "cache_version": "2026-04-04-v1",
+  "fingerprint": "c7acb1fc33ca35aba5054201b4330da8bddc62b28dec8d6f5708285a3d49502a"
+}

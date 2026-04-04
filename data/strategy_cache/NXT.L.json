@@ -1,0 +1,33 @@
+{
+  "ticker": "NXT.L",
+  "best": "S5_COMBO_BUF",
+  "params": {
+    "golden_min_weeks_on": 12,
+    "golden_trailing_atr_mult": 2.0,
+    "golden_ma_break_confirm_weeks": 2,
+    "golden_rsi_entry_buffer": 30.0,
+    "golden_rsi_high_quantile": 0.92
+  },
+  "cums": {
+    "S0_BASE": 141.51,
+    "S1_FAST": 67.09,
+    "S2_HOLD12": 141.68,
+    "S3_HOLD16": 218.53,
+    "S4_WIDEATR": 174.13,
+    "S5_COMBO": 228.73,
+    "S6_TIGHT": 63.94,
+    "S2_HOLD12_BUF": 235.82,
+    "S3_HOLD16_BUF": 276.23,
+    "S5_COMBO_BUF": 445.29,
+    "S8_DI_GUARD": 67.25,
+    "S8_DI_GUARD_BUF": 130.16,
+    "S11_VOLATILE_FAST": 70.26,
+    "S12_COMPOUNDER_HOLD": 120.02,
+    "S12_RECOVERY": 218.83
+  },
+  "recent_cum_3y": null,
+  "recent_override": null,
+  "computed": "2026-04-04T17:27:52",
+  "cache_version": "2026-04-04-v1",
+  "fingerprint": "c7acb1fc33ca35aba5054201b4330da8bddc62b28dec8d6f5708285a3d49502a"
+}

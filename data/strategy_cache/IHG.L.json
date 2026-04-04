@@ -1,0 +1,33 @@
+{
+  "ticker": "IHG.L",
+  "best": "S8_DI_GUARD_BUF",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0,
+    "silver_require_bullish_di": true,
+    "golden_rsi_entry_buffer": 30.0,
+    "golden_rsi_high_quantile": 0.92
+  },
+  "cums": {
+    "S0_BASE": 74.35,
+    "S1_FAST": 168.42,
+    "S2_HOLD12": 68.88,
+    "S3_HOLD16": 67.53,
+    "S4_WIDEATR": 122.01,
+    "S5_COMBO": 85.67,
+    "S6_TIGHT": 147.86,
+    "S2_HOLD12_BUF": 101.99,
+    "S3_HOLD16_BUF": 112.69,
+    "S5_COMBO_BUF": 164.6,
+    "S8_DI_GUARD": 172.74,
+    "S8_DI_GUARD_BUF": 299.29,
+    "S11_VOLATILE_FAST": 165.44,
+    "S12_COMPOUNDER_HOLD": 127.3,
+    "S12_RECOVERY": -11.13
+  },
+  "recent_cum_3y": 12.98,
+  "recent_override": null,
+  "computed": "2026-04-04T17:28:33",
+  "cache_version": "2026-04-04-v1",
+  "fingerprint": "c7acb1fc33ca35aba5054201b4330da8bddc62b28dec8d6f5708285a3d49502a"
+}

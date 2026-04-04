@@ -1,0 +1,33 @@
+{
+  "ticker": "SAP.DE",
+  "best": "S8_DI_GUARD_BUF",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0,
+    "silver_require_bullish_di": true,
+    "golden_rsi_entry_buffer": 30.0,
+    "golden_rsi_high_quantile": 0.92
+  },
+  "cums": {
+    "S0_BASE": 256.82,
+    "S1_FAST": 195.49,
+    "S2_HOLD12": 272.02,
+    "S3_HOLD16": 228.37,
+    "S4_WIDEATR": 180.91,
+    "S5_COMBO": 155.04,
+    "S6_TIGHT": 201.38,
+    "S2_HOLD12_BUF": 212.83,
+    "S3_HOLD16_BUF": 177.2,
+    "S5_COMBO_BUF": 278.68,
+    "S8_DI_GUARD": 213.11,
+    "S8_DI_GUARD_BUF": 331.64,
+    "S11_VOLATILE_FAST": 182.97,
+    "S12_COMPOUNDER_HOLD": 247.77,
+    "S12_RECOVERY": 158.11
+  },
+  "recent_cum_3y": 11.6,
+  "recent_override": null,
+  "computed": "2026-04-04T17:19:14",
+  "cache_version": "2026-04-04-v1",
+  "fingerprint": "c7acb1fc33ca35aba5054201b4330da8bddc62b28dec8d6f5708285a3d49502a"
+}

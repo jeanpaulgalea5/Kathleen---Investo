@@ -1,0 +1,32 @@
+{
+  "ticker": "ADBE",
+  "best": "S12_RECOVERY",
+  "params": {
+    "golden_min_weeks_on": 6,
+    "golden_trailing_atr_mult": 1.6,
+    "golden_rsi_entry_buffer": 25.0,
+    "silver_adx_entry_min": 18.0
+  },
+  "cums": {
+    "S0_BASE": 242.92,
+    "S1_FAST": 236.81,
+    "S2_HOLD12": 242.92,
+    "S3_HOLD16": 322.09,
+    "S4_WIDEATR": 352.61,
+    "S5_COMBO": 397.02,
+    "S6_TIGHT": 243.14,
+    "S2_HOLD12_BUF": 344.92,
+    "S3_HOLD16_BUF": 429.21,
+    "S5_COMBO_BUF": 626.67,
+    "S8_DI_GUARD": 235.97,
+    "S8_DI_GUARD_BUF": 211.83,
+    "S11_VOLATILE_FAST": 284.31,
+    "S12_COMPOUNDER_HOLD": 233.61,
+    "S12_RECOVERY": 143.37
+  },
+  "recent_cum_3y": -32.07,
+  "recent_override": "S12_RECOVERY",
+  "computed": "2026-04-04T17:29:52",
+  "cache_version": "2026-04-04-v1",
+  "fingerprint": "c7acb1fc33ca35aba5054201b4330da8bddc62b28dec8d6f5708285a3d49502a"
+}

@@ -1,0 +1,32 @@
+{
+  "ticker": "SSPG.L",
+  "best": "S11_VOLATILE_FAST",
+  "params": {
+    "golden_min_weeks_on": 3,
+    "golden_trailing_atr_mult": 0.9,
+    "golden_hard_stop_from_entry_pct": 0.06,
+    "silver_max_dist_from_ma": 0.05
+  },
+  "cums": {
+    "S0_BASE": -39.82,
+    "S1_FAST": -39.27,
+    "S2_HOLD12": -48.08,
+    "S3_HOLD16": -51.07,
+    "S4_WIDEATR": -42.32,
+    "S5_COMBO": -47.7,
+    "S6_TIGHT": -26.39,
+    "S2_HOLD12_BUF": -33.29,
+    "S3_HOLD16_BUF": -40.87,
+    "S5_COMBO_BUF": -32.79,
+    "S8_DI_GUARD": -41.84,
+    "S8_DI_GUARD_BUF": -27.17,
+    "S11_VOLATILE_FAST": -22.83,
+    "S12_COMPOUNDER_HOLD": -26.88,
+    "S12_RECOVERY": -44.33
+  },
+  "recent_cum_3y": 4.72,
+  "recent_override": null,
+  "computed": "2026-04-04T17:27:28",
+  "cache_version": "2026-04-04-v1",
+  "fingerprint": "c7acb1fc33ca35aba5054201b4330da8bddc62b28dec8d6f5708285a3d49502a"
+}

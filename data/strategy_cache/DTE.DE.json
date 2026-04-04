@@ -1,0 +1,31 @@
+{
+  "ticker": "DTE.DE",
+  "best": "S8_DI_GUARD",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0,
+    "silver_require_bullish_di": true
+  },
+  "cums": {
+    "S0_BASE": 77.13,
+    "S1_FAST": 132.23,
+    "S2_HOLD12": 84.84,
+    "S3_HOLD16": 89.02,
+    "S4_WIDEATR": 81.74,
+    "S5_COMBO": 54.61,
+    "S6_TIGHT": 105.49,
+    "S2_HOLD12_BUF": 61.07,
+    "S3_HOLD16_BUF": 62.65,
+    "S5_COMBO_BUF": 36.01,
+    "S8_DI_GUARD": 156.85,
+    "S8_DI_GUARD_BUF": 93.39,
+    "S11_VOLATILE_FAST": 122.18,
+    "S12_COMPOUNDER_HOLD": 80.39,
+    "S12_RECOVERY": 42.62
+  },
+  "recent_cum_3y": null,
+  "recent_override": null,
+  "computed": "2026-04-04T17:11:15",
+  "cache_version": "2026-04-04-v1",
+  "fingerprint": "c7acb1fc33ca35aba5054201b4330da8bddc62b28dec8d6f5708285a3d49502a"
+}

@@ -1,0 +1,32 @@
+{
+  "ticker": "SHL.DE",
+  "best": "S12_RECOVERY",
+  "params": {
+    "golden_min_weeks_on": 6,
+    "golden_trailing_atr_mult": 1.6,
+    "golden_rsi_entry_buffer": 25.0,
+    "silver_adx_entry_min": 18.0
+  },
+  "cums": {
+    "S0_BASE": -10.8,
+    "S1_FAST": 13.98,
+    "S2_HOLD12": -10.8,
+    "S3_HOLD16": -12.23,
+    "S4_WIDEATR": -14.59,
+    "S5_COMBO": -13.84,
+    "S6_TIGHT": 9.93,
+    "S2_HOLD12_BUF": -2.5,
+    "S3_HOLD16_BUF": -11.79,
+    "S5_COMBO_BUF": -10.0,
+    "S8_DI_GUARD": 27.07,
+    "S8_DI_GUARD_BUF": 37.44,
+    "S11_VOLATILE_FAST": 8.24,
+    "S12_COMPOUNDER_HOLD": -14.51,
+    "S12_RECOVERY": 18.91
+  },
+  "recent_cum_3y": -15.44,
+  "recent_override": "S12_RECOVERY",
+  "computed": "2026-04-04T17:19:30",
+  "cache_version": "2026-04-04-v1",
+  "fingerprint": "c7acb1fc33ca35aba5054201b4330da8bddc62b28dec8d6f5708285a3d49502a"
+}

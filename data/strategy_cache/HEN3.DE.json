@@ -1,0 +1,29 @@
+{
+  "ticker": "HEN3.DE",
+  "best": "S4_WIDEATR",
+  "params": {
+    "golden_trailing_atr_mult": 2.2
+  },
+  "cums": {
+    "S0_BASE": 66.21,
+    "S1_FAST": 44.71,
+    "S2_HOLD12": 51.88,
+    "S3_HOLD16": 62.69,
+    "S4_WIDEATR": 80.51,
+    "S5_COMBO": 24.82,
+    "S6_TIGHT": 57.72,
+    "S2_HOLD12_BUF": 33.87,
+    "S3_HOLD16_BUF": 32.86,
+    "S5_COMBO_BUF": 8.34,
+    "S8_DI_GUARD": 52.01,
+    "S8_DI_GUARD_BUF": 72.04,
+    "S11_VOLATILE_FAST": 78.22,
+    "S12_COMPOUNDER_HOLD": 56.17,
+    "S12_RECOVERY": 17.34
+  },
+  "recent_cum_3y": -8.69,
+  "recent_override": null,
+  "computed": "2026-04-04T17:17:59",
+  "cache_version": "2026-04-04-v1",
+  "fingerprint": "c7acb1fc33ca35aba5054201b4330da8bddc62b28dec8d6f5708285a3d49502a"
+}

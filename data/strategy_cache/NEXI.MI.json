@@ -1,0 +1,30 @@
+{
+  "ticker": "NEXI.MI",
+  "best": "S1_FAST",
+  "params": {
+    "golden_min_weeks_on": 4,
+    "golden_trailing_atr_mult": 1.0
+  },
+  "cums": {
+    "S0_BASE": -56.41,
+    "S1_FAST": -41.99,
+    "S2_HOLD12": -52.2,
+    "S3_HOLD16": -56.15,
+    "S4_WIDEATR": -50.24,
+    "S5_COMBO": -43.27,
+    "S6_TIGHT": -49.28,
+    "S2_HOLD12_BUF": -58.48,
+    "S3_HOLD16_BUF": -58.23,
+    "S5_COMBO_BUF": -53.47,
+    "S8_DI_GUARD": -41.43,
+    "S8_DI_GUARD_BUF": -40.69,
+    "S11_VOLATILE_FAST": -41.24,
+    "S12_COMPOUNDER_HOLD": -48.65,
+    "S12_RECOVERY": -55.92
+  },
+  "recent_cum_3y": -28.02,
+  "recent_override": "S1_FAST",
+  "computed": "2026-04-04T17:20:50",
+  "cache_version": "2026-04-04-v1",
+  "fingerprint": "c7acb1fc33ca35aba5054201b4330da8bddc62b28dec8d6f5708285a3d49502a"
+}
