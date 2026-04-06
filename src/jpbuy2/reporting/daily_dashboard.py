@@ -1542,6 +1542,65 @@ def _read_git_sha(repo_root: Path) -> str:
     except Exception:
         return ""
 
+def _strategy_cache_path(data_dir: str, ticker: str) -> Path:
+    safe = str(ticker or "").strip().replace("/", "_").replace("\\", "_")
+    return Path(data_dir) / "strategy_cache" / f"{safe}.json"
+
+
+def _read_strategy_health(data_dir: str, ticker: str) -> dict[str, Any]:
+    """
+    Read recent strategy health from adaptive strategy cache.
+
+    Broken = negative on both 4Y and 3Y.
+    This is a dashboard execution filter, not a selector change.
+    """
+    path = _strategy_cache_path(data_dir, ticker)
+    if not path.exists():
+        return {
+            "decision_window": "",
+            "pct_4y": None,
+            "pct_3y": None,
+            "broken": False,
+            "health_label": "",
+        }
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {
+            "decision_window": "",
+            "pct_4y": None,
+            "pct_3y": None,
+            "broken": False,
+            "health_label": "",
+        }
+
+    pct_4y = _safe_float(payload.get("cums_4y", {}).get(payload.get("best_4y")))
+    pct_3y = _safe_float(payload.get("cums_3y", {}).get(payload.get("best_3y")))
+    decision_window = str(payload.get("decision_window", "") or "").strip().upper()
+
+    broken = (
+        pct_4y is not None
+        and pct_3y is not None
+        and pct_4y < 0
+        and pct_3y < 0
+    )
+
+    if broken:
+        health_label = "BROKEN"
+    elif pct_4y is not None and pct_3y is not None:
+        health_label = "OK"
+    else:
+        health_label = ""
+
+    return {
+        "decision_window": decision_window,
+        "pct_4y": pct_4y,
+        "pct_3y": pct_3y,
+        "broken": broken,
+        "health_label": health_label,
+    }
+
 def _format_cell_html(col: str, val: Any) -> str:
     sval = "" if pd.isna(val) else str(val)
 
@@ -1665,6 +1724,16 @@ def _format_cell_html(col: str, val: Any) -> str:
         if num >= 50:
             return f'<span class="warn">{escape(sval)}</span>'
         return f'<span class="weak">{escape(sval)}</span>'
+
+    if col == "Recent Strategy Health":
+        css_map = {
+            "BROKEN": "neg",
+            "OK": "good",
+        }
+        return f'<span class="{css_map.get(sval, "neutral")}">{escape(sval)}</span>'
+
+    if col == "Broken" and sval:
+        return f'<span class="neg">{escape(sval)}</span>'
         
     return escape(sval)
 
@@ -1743,6 +1812,18 @@ def _build_html(
     stock_buy_df = unheld_buy_df[unheld_buy_df["Type"] != "ETF"].copy()
     etf_buy_df = unheld_buy_df[unheld_buy_df["Type"] == "ETF"].copy()
 
+    if not stock_buy_df.empty and "Broken" in stock_buy_df.columns:
+        stock_buy_df = stock_buy_df[
+            stock_buy_df["Broken"].astype(str).str.strip().str.upper() != "YES"
+        ].copy()
+
+    if not stock_buy_df.empty and "Priority Score" in stock_buy_df.columns:
+        stock_buy_df.sort_values(
+            by=["Priority Score", "Cycle Win Rate 3Y", "Prudent Upside %", "Ticker"],
+            ascending=[False, False, False, True],
+            inplace=True,
+        )
+
     # ETFs already held, but with active add/buy signal
     etf_add_df = monitor_df.copy()
     etf_add_df["Ticker"] = etf_add_df["Ticker"].astype(str).str.strip().str.upper()
@@ -1793,7 +1874,12 @@ def _build_html(
         blocked_df = blocked_df[
             ~blocked_df["Ticker"].astype(str).str.strip().str.upper().isin(held_tickers)
         ].copy()
-    
+
+    if not blocked_df.empty and "Broken" in blocked_df.columns:
+        blocked_df = blocked_df[
+            blocked_df["Broken"].astype(str).str.strip().str.upper() != "YES"
+        ].copy()
+
     exit_now_df = (
         exit_df[exit_df["Status"] == "EXIT NOW"].copy()
         if not exit_df.empty
@@ -1952,6 +2038,11 @@ def _build_html(
         "Ticker",
         "Name",
         "Strategy Used",
+        "Decision Window",
+        "4Y Strategy Return %",
+        "3Y Strategy Return %",
+        "Recent Strategy Health",
+        "Broken",
         "Status",
         "Price",
         "1D %",
@@ -2442,6 +2533,17 @@ def _build_monitor_row(
     priority_score = current_opportunity_score
     priority = _current_opportunity_stars(priority_score)
 
+    strategy_health = {
+        "decision_window": "",
+        "pct_4y": None,
+        "pct_3y": None,
+        "broken": False,
+        "health_label": "",
+    }
+
+    if asset_type_norm not in {"etf", "goldetf", "commodity"}:
+        strategy_health = _read_strategy_health(data_dir, ticker)
+
     return {
         "Ticker": ticker,
         "Name": str(name or "").strip(),
@@ -2449,6 +2551,11 @@ def _build_monitor_row(
         "Platform": platform,
         "Currency": currency,
         "Strategy Used": strategy_used,
+        "Decision Window": strategy_health.get("decision_window", ""),
+        "4Y Strategy Return %": _fmt_pct(strategy_health.get("pct_4y"), 1),
+        "3Y Strategy Return %": _fmt_pct(strategy_health.get("pct_3y"), 1),
+        "Recent Strategy Health": strategy_health.get("health_label", ""),
+        "Broken": "YES" if strategy_health.get("broken", False) else "",
         "Status": status,
         "Backtest State": raw_engine_state,
         "Price": _fmt_num(display_price, 2),
@@ -2796,7 +2903,7 @@ def generate_daily_dashboard(
     summary_archive.write_text(summary_json, encoding="utf-8")
 
     if send_email:
-        subject = f"Kathleen - Daily dashboard – {now_local.strftime('%d/%m/%Y %H:%M')}"
+        subject = f"Daily dashboard – {now_local.strftime('%d/%m/%Y %H:%M')}"
         _send_email(subject, html)
 
     return {
