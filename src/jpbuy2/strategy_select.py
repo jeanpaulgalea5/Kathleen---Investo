@@ -247,18 +247,20 @@ def _pick_best(cums: dict[str, float | None]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Hybrid selection constants
+# Window selection constants
 # ---------------------------------------------------------------------------
-# If the full-history strategy performs below this on the last 3 years,
-# the ticker has changed character → override with the 3Y winner instead.
-_HYBRID_3Y_THRESHOLD   = -0.10   # -10% cumulative on 3Y window triggers override
-_HYBRID_3Y_CUTOFF_DAYS = 3 * 365  # rolling 3-year window
+_WINDOW_4Y_DAYS = 4 * 365
+_WINDOW_3Y_DAYS = 3 * 365
+
+# Minimum relative uplift required for a recent-window winner to override FULL.
+# Example: 0.05 = recent-window winner must beat FULL by at least 5 percentage points.
+_WINDOW_OVERRIDE_MIN_DELTA = 0.05
 
 # ---------------------------------------------------------------------------
 # Cache versioning
 # ---------------------------------------------------------------------------
 
-_STRATEGY_CACHE_VERSION = "2026-04-04-v1"
+_STRATEGY_CACHE_VERSION = "2026-04-05-v2"
 
 def _strategy_fingerprint() -> str:
     """
@@ -266,36 +268,40 @@ def _strategy_fingerprint() -> str:
     whenever profiles or parameters change.
     """
     payload = {
-        "version": _STRATEGY_CACHE_VERSION,
-        "profiles": sorted(STRATEGY_PROFILES.keys()),
-        "params": STRATEGY_PARAMS,
-        "hybrid_3y_threshold": _HYBRID_3Y_THRESHOLD,
-        "hybrid_3y_cutoff_days": _HYBRID_3Y_CUTOFF_DAYS,
+       "version": _STRATEGY_CACHE_VERSION,
+       "profiles": sorted(STRATEGY_PROFILES.keys()),
+       "params": STRATEGY_PARAMS,
+       "window_4y_days": _WINDOW_4Y_DAYS,
+       "window_3y_days": _WINDOW_3Y_DAYS,
+       "window_override_min_delta": _WINDOW_OVERRIDE_MIN_DELTA,
     }
     raw = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
 
 def _recent_cum(
     df_d: pd.DataFrame,
-    df_w: pd.DataFrame,
     s: Settings,
-    days: int = _HYBRID_3Y_CUTOFF_DAYS,
+    days: int,
     min_trades: int = 3,
 ) -> float | None:
     """
-    Run the strategy on the most recent `days` of data.
+    Run one strategy on the most recent `days` of daily data.
     Returns cumulative return or None if insufficient data/trades.
     """
     cutoff = pd.Timestamp(df_d.index[-1]) - pd.Timedelta(days=days)
     dd_r = df_d[df_d.index >= cutoff].copy()
+
     if len(dd_r) < 200:
         return None
+
     dd_r.index = pd.to_datetime(dd_r.index)
     dw_r = dd_r.resample("W-FRI").agg(
         {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
     ).dropna()
+
     if len(dw_r) < 40:
         return None
+
     try:
         r = run_backtest(dd_r, dw_r, "stock", s)
         dt = trades_to_df(r["trades"])
@@ -304,7 +310,41 @@ def _recent_cum(
         return float((dt["ret"] + 1).prod() - 1)
     except Exception:
         return None
+def _run_all_strategies_recent(
+    df_d: pd.DataFrame,
+    days: int,
+    min_trades: int = 3,
+) -> dict[str, float | None]:
+    """
+    Run every strategy profile on the most recent `days` of daily data.
+    Returns cumulative return per strategy, or None if insufficient data/trades.
+    """
+    cutoff = pd.Timestamp(df_d.index[-1]) - pd.Timedelta(days=days)
+    dd_r = df_d[df_d.index >= cutoff].copy()
 
+    if len(dd_r) < 200:
+        return {k: None for k in STRATEGY_PROFILES.keys()}
+
+    dd_r.index = pd.to_datetime(dd_r.index)
+    dw_r = dd_r.resample("W-FRI").agg(
+        {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+    ).dropna()
+
+    if len(dw_r) < 40:
+        return {k: None for k in STRATEGY_PROFILES.keys()}
+
+    cums: dict[str, float | None] = {}
+    for sname, s in STRATEGY_PROFILES.items():
+        try:
+            result = run_backtest(dd_r, dw_r, "stock", s)
+            dt = trades_to_df(result["trades"])
+            if dt.empty or len(dt) < min_trades:
+                cums[sname] = None
+                continue
+            cums[sname] = float((dt["ret"] + 1).prod() - 1)
+        except Exception:
+            cums[sname] = None
+    return cums
 
 def select_strategy(
     ticker: str,
@@ -315,21 +355,23 @@ def select_strategy(
     force: bool = False,
 ) -> tuple[str, Settings, dict]:
     """
-    Select the best strategy for a ticker — hybrid full-history + 3Y validation.
+    Select the best strategy for a ticker using per-ticker window comparison.
 
-    HYBRID LOGIC
-    ------------
-    1. Select best strategy on full history (primary signal — statistically robust).
-    2. Validate: run that strategy on the last 3 years of data.
-    3. If recent performance < _HYBRID_3Y_THRESHOLD (-10%), the ticker has
-       changed regime. Override with the best strategy from the 3Y window.
-    4. This catches genuine regime changes (e.g. secular growers entering
-       multi-year downtrends) without overfitting to thin short-term data.
+    Candidate decision bases:
+    - FULL history
+    - last 4 years
+    - last 3 years
 
-    Returns (strategy_name, Settings_object, all_cums_dict)
+    For each ticker:
+    1. find the FULL-history winner
+    2. find the 4Y winner
+    3. find the 3Y winner
+    4. compare the three winning candidates on their own window scores
+    5. choose the strongest recent-valid basis for that ticker
+
+    Returns (strategy_name, Settings_object, cums_dict_for_selected_window)
     Side effect: writes result to data/strategy_cache/<ticker>.json
     """
-    # --- cache hit ---
     if not force and _cache_is_valid(ticker, data_dir):
         cached = _read_cache(ticker, data_dir)
         if cached and "best" in cached:
@@ -337,47 +379,86 @@ def select_strategy(
             s = STRATEGY_PROFILES.get(best_name, Settings())
             return best_name, s, cached.get("cums", {})
 
-    # --- Step 1: full-history selection ---
-    cums = _run_all_strategies(df_d, df_w, min_trades=min_trades)
-    best_name = _pick_best(cums)
+    # --- FULL history ---
+    cums_full = _run_all_strategies(df_d, df_w, min_trades=min_trades)
+    best_full = _pick_best(cums_full)
+    best_full_score = cums_full.get(best_full)
 
-    # --- Step 2: 3Y validation ---
-    recent_override = None
-    recent_cum_val = _recent_cum(df_d, df_w, STRATEGY_PROFILES[best_name])
+    # --- Recent windows ---
+    cums_4y = _run_all_strategies_recent(df_d, _WINDOW_4Y_DAYS, min_trades=3)
+    best_4y = _pick_best(cums_4y)
+    best_4y_score = cums_4y.get(best_4y)
 
-    if recent_cum_val is not None and recent_cum_val < _HYBRID_3Y_THRESHOLD:
-        # Full-hist strategy broken on recent data — find 3Y winner
-        cutoff = pd.Timestamp(df_d.index[-1]) - pd.Timedelta(days=_HYBRID_3Y_CUTOFF_DAYS)
-        dd_3y = df_d[df_d.index >= cutoff].copy()
-        if len(dd_3y) >= 200:
-            dd_3y.index = pd.to_datetime(dd_3y.index)
-            dw_3y = dd_3y.resample("W-FRI").agg(
-                {"open": "first", "high": "max", "low": "min",
-                 "close": "last", "volume": "sum"}
-            ).dropna()
-            if len(dw_3y) >= 40:
-                cums_3y = _run_all_strategies(dd_3y, dw_3y, min_trades=3)
-                best_3y = _pick_best(cums_3y)
-                if best_3y != best_name:
-                    recent_override = best_3y
-                    best_name = best_3y
+    cums_3y = _run_all_strategies_recent(df_d, _WINDOW_3Y_DAYS, min_trades=3)
+    best_3y = _pick_best(cums_3y)
+    best_3y_score = cums_3y.get(best_3y)
+
+   # Default = FULL fallback only
+    selected_window = "FULL"
+    best_name = best_full
+    selected_cums = cums_full
+
+    score_4y = best_4y_score if best_4y_score is not None else float("-inf")
+    score_3y = best_3y_score if best_3y_score is not None else float("-inf")
+
+    has_4y = best_4y_score is not None
+    has_3y = best_3y_score is not None
+
+    # Primary decision: choose between 4Y and 3Y only
+    if has_4y and has_3y:
+        if score_4y >= score_3y + _WINDOW_OVERRIDE_MIN_DELTA:
+            selected_window = "4Y"
+            best_name = best_4y
+            selected_cums = cums_4y
+        elif score_3y > score_4y:
+            selected_window = "3Y"
+            best_name = best_3y
+            selected_cums = cums_3y
+        else:
+            # very close → prefer 4Y for stability
+            selected_window = "4Y"
+            best_name = best_4y
+            selected_cums = cums_4y
+
+    elif has_4y:
+        selected_window = "4Y"
+        best_name = best_4y
+        selected_cums = cums_4y
+
+    elif has_3y:
+        selected_window = "3Y"
+        best_name = best_3y
+        selected_cums = cums_3y
 
     payload = {
-         "ticker":          ticker,
-         "best":            best_name,
-         "params":          STRATEGY_PARAMS.get(best_name, {}),
-         "cums":            {
-             k: round(v * 100, 2) if v is not None else None
-             for k, v in cums.items()
-         },
-         "recent_cum_3y":   round(recent_cum_val * 100, 2) if recent_cum_val is not None else None,
-         "recent_override": recent_override,
-         "computed":        time.strftime("%Y-%m-%dT%H:%M:%S"),
-         "cache_version":   _STRATEGY_CACHE_VERSION,
-         "fingerprint":     _strategy_fingerprint(),
-     }
+        "ticker": ticker,
+        "best": best_name,
+        "decision_window": selected_window,
+        "params": STRATEGY_PARAMS.get(best_name, {}),
+        "cums": {
+            k: round(v * 100, 2) if v is not None else None
+            for k, v in selected_cums.items()
+        },
+        "cums_full": {
+            k: round(v * 100, 2) if v is not None else None
+            for k, v in cums_full.items()
+        },
+        "cums_4y": {
+            k: round(v * 100, 2) if v is not None else None
+            for k, v in cums_4y.items()
+        },
+        "cums_3y": {
+            k: round(v * 100, 2) if v is not None else None
+            for k, v in cums_3y.items()
+        },
+        "best_full": best_full,
+        "best_4y": best_4y,
+        "best_3y": best_3y,
+        "computed": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "cache_version": _STRATEGY_CACHE_VERSION,
+        "fingerprint": _strategy_fingerprint(),
+    }
 
-   
     _write_cache(ticker, data_dir, payload)
 
     return best_name, STRATEGY_PROFILES[best_name], payload["cums"]
