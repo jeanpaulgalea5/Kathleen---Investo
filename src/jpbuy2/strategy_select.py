@@ -251,6 +251,8 @@ def _pick_best(cums: dict[str, float | None]) -> str:
 # ---------------------------------------------------------------------------
 _WINDOW_4Y_DAYS = 4 * 365
 _WINDOW_3Y_DAYS = 3 * 365
+_WINDOW_2Y_DAYS = 2 * 365
+_WINDOW_1Y_DAYS = 365
 
 # Minimum relative uplift required for a recent-window winner to override FULL.
 # Example: 0.05 = recent-window winner must beat FULL by at least 5 percentage points.
@@ -260,7 +262,7 @@ _WINDOW_OVERRIDE_MIN_DELTA = 0.05
 # Cache versioning
 # ---------------------------------------------------------------------------
 
-_STRATEGY_CACHE_VERSION = "2026-04-05-v2"
+_STRATEGY_CACHE_VERSION = "2026-04-07-v4"
 
 def _strategy_fingerprint() -> str:
     """
@@ -273,78 +275,108 @@ def _strategy_fingerprint() -> str:
        "params": STRATEGY_PARAMS,
        "window_4y_days": _WINDOW_4Y_DAYS,
        "window_3y_days": _WINDOW_3Y_DAYS,
+       "window_2y_days": _WINDOW_2Y_DAYS,
+       "window_1y_days": _WINDOW_1Y_DAYS,
        "window_override_min_delta": _WINDOW_OVERRIDE_MIN_DELTA,
     }
     raw = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
 
-def _recent_cum(
+def _run_all_strategies_full_trades(
     df_d: pd.DataFrame,
-    s: Settings,
+    df_w: pd.DataFrame,
+    min_trades: int = 3,
+) -> dict[str, pd.DataFrame | None]:
+    """
+    Run every strategy profile on full history and return the full trades DataFrame
+    per strategy. Returns None if insufficient trades.
+    """
+    out: dict[str, pd.DataFrame | None] = {}
+
+    for sname, s in STRATEGY_PROFILES.items():
+        try:
+            result = run_backtest(df_d, df_w, "stock", s)
+            dt = trades_to_df(result["trades"])
+
+            if dt.empty or len(dt) < min_trades:
+                out[sname] = None
+                continue
+
+            dt = dt.copy()
+
+            if "entry_date" in dt.columns:
+                dt["entry_date"] = pd.to_datetime(dt["entry_date"], errors="coerce")
+            if "exit_date" in dt.columns:
+                dt["exit_date"] = pd.to_datetime(dt["exit_date"], errors="coerce")
+            elif "exit_ts" in dt.columns:
+                dt["exit_date"] = pd.to_datetime(dt["exit_ts"], errors="coerce")
+            else:
+                out[sname] = None
+                continue
+
+            dt = dt.dropna(subset=["exit_date"]).copy()
+
+            if dt.empty or len(dt) < min_trades:
+                out[sname] = None
+                continue
+
+            out[sname] = dt
+
+        except Exception:
+            out[sname] = None
+
+    return out
+
+
+def _cum_from_trades(dt: pd.DataFrame | None, min_trades: int = 3) -> float | None:
+    """
+    Compound full trade list return.
+    """
+    if dt is None or dt.empty or len(dt) < min_trades:
+        return None
+    return float((dt["ret"] + 1).prod() - 1)
+
+
+def _score_trades_window(
+    dt: pd.DataFrame | None,
+    asof: pd.Timestamp,
     days: int,
     min_trades: int = 3,
 ) -> float | None:
     """
-    Run one strategy on the most recent `days` of daily data.
-    Returns cumulative return or None if insufficient data/trades.
+    Score only trades whose exit_date falls within the recent window.
+    Technicals are still built from full-history backtest.
     """
-    cutoff = pd.Timestamp(df_d.index[-1]) - pd.Timedelta(days=days)
-    dd_r = df_d[df_d.index >= cutoff].copy()
-
-    if len(dd_r) < 200:
+    if dt is None or dt.empty:
         return None
 
-    dd_r.index = pd.to_datetime(dd_r.index)
-    dw_r = dd_r.resample("W-FRI").agg(
-        {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
-    ).dropna()
+    cutoff = asof - pd.Timedelta(days=days)
+    sl = dt[dt["exit_date"] >= cutoff].copy()
 
-    if len(dw_r) < 40:
+    if sl.empty or len(sl) < min_trades:
         return None
 
-    try:
-        r = run_backtest(dd_r, dw_r, "stock", s)
-        dt = trades_to_df(r["trades"])
-        if dt.empty or len(dt) < min_trades:
-            return None
-        return float((dt["ret"] + 1).prod() - 1)
-    except Exception:
-        return None
-def _run_all_strategies_recent(
-    df_d: pd.DataFrame,
+    return float((sl["ret"] + 1).prod() - 1)
+
+
+def _window_scores_from_full_trades(
+    all_trades: dict[str, pd.DataFrame | None],
+    asof: pd.Timestamp,
     days: int,
     min_trades: int = 3,
 ) -> dict[str, float | None]:
     """
-    Run every strategy profile on the most recent `days` of daily data.
-    Returns cumulative return per strategy, or None if insufficient data/trades.
+    Compute recent-window compounded return from full-history trade lists.
     """
-    cutoff = pd.Timestamp(df_d.index[-1]) - pd.Timedelta(days=days)
-    dd_r = df_d[df_d.index >= cutoff].copy()
-
-    if len(dd_r) < 200:
-        return {k: None for k in STRATEGY_PROFILES.keys()}
-
-    dd_r.index = pd.to_datetime(dd_r.index)
-    dw_r = dd_r.resample("W-FRI").agg(
-        {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
-    ).dropna()
-
-    if len(dw_r) < 40:
-        return {k: None for k in STRATEGY_PROFILES.keys()}
-
-    cums: dict[str, float | None] = {}
-    for sname, s in STRATEGY_PROFILES.items():
-        try:
-            result = run_backtest(dd_r, dw_r, "stock", s)
-            dt = trades_to_df(result["trades"])
-            if dt.empty or len(dt) < min_trades:
-                cums[sname] = None
-                continue
-            cums[sname] = float((dt["ret"] + 1).prod() - 1)
-        except Exception:
-            cums[sname] = None
-    return cums
+    scores: dict[str, float | None] = {}
+    for sname, dt in all_trades.items():
+        scores[sname] = _score_trades_window(
+            dt=dt,
+            asof=asof,
+            days=days,
+            min_trades=min_trades,
+        )
+    return scores
 
 def select_strategy(
     ticker: str,
@@ -355,22 +387,16 @@ def select_strategy(
     force: bool = False,
 ) -> tuple[str, Settings, dict]:
     """
-    Select the best strategy for a ticker using per-ticker window comparison.
+    Select the best strategy for a ticker using full-history technicals
+    and recent-window scoring from the resulting trade lists.
 
     Candidate decision bases:
     - FULL history
     - last 4 years
     - last 3 years
 
-    For each ticker:
-    1. find the FULL-history winner
-    2. find the 4Y winner
-    3. find the 3Y winner
-    4. compare the three winning candidates on their own window scores
-    5. choose the strongest recent-valid basis for that ticker
-
-    Returns (strategy_name, Settings_object, cums_dict_for_selected_window)
-    Side effect: writes result to data/strategy_cache/<ticker>.json
+    FULL remains primary.
+    4Y / 3Y can override only if they are genuinely better and positive.
     """
     if not force and _cache_is_valid(ticker, data_dir):
         cached = _read_cache(ticker, data_dir)
@@ -379,56 +405,52 @@ def select_strategy(
             s = STRATEGY_PROFILES.get(best_name, Settings())
             return best_name, s, cached.get("cums", {})
 
-    # --- FULL history ---
-    cums_full = _run_all_strategies(df_d, df_w, min_trades=min_trades)
+    # Ensure datetime index
+    df_d = df_d.copy()
+    df_d.index = pd.to_datetime(df_d.index)
+
+    # Run all strategies once on full-history technical context
+    all_trades = _run_all_strategies_full_trades(df_d, df_w, min_trades=3)
+    asof = pd.Timestamp(df_d.index[-1])
+
+    # FULL-history compounded return
+    cums_full: dict[str, float | None] = {
+        sname: _cum_from_trades(dt, min_trades=3)
+        for sname, dt in all_trades.items()
+    }
+
+    # Recent windows scored from full-history trades
+    cums_4y = _window_scores_from_full_trades(
+        all_trades, asof, _WINDOW_4Y_DAYS, min_trades=3
+    )
+    cums_3y = _window_scores_from_full_trades(
+        all_trades, asof, _WINDOW_3Y_DAYS, min_trades=3
+    )
+    cums_2y = _window_scores_from_full_trades(
+        all_trades, asof, _WINDOW_2Y_DAYS, min_trades=2
+    )
+    cums_1y = _window_scores_from_full_trades(
+        all_trades, asof, _WINDOW_1Y_DAYS, min_trades=1
+    )
+
     best_full = _pick_best(cums_full)
-    best_full_score = cums_full.get(best_full)
-
-    # --- Recent windows ---
-    cums_4y = _run_all_strategies_recent(df_d, _WINDOW_4Y_DAYS, min_trades=3)
     best_4y = _pick_best(cums_4y)
-    best_4y_score = cums_4y.get(best_4y)
-
-    cums_3y = _run_all_strategies_recent(df_d, _WINDOW_3Y_DAYS, min_trades=3)
     best_3y = _pick_best(cums_3y)
-    best_3y_score = cums_3y.get(best_3y)
+    best_2y = _pick_best(cums_2y)
+    best_1y = _pick_best(cums_1y)
 
-   # Default = FULL fallback only
-    selected_window = "FULL"
-    best_name = best_full
-    selected_cums = cums_full
+    best_2y_score = cums_2y.get(best_2y)
 
-    score_4y = best_4y_score if best_4y_score is not None else float("-inf")
-    score_3y = best_3y_score if best_3y_score is not None else float("-inf")
-
-    has_4y = best_4y_score is not None
-    has_3y = best_3y_score is not None
-
-    # Primary decision: choose between 4Y and 3Y only
-    if has_4y and has_3y:
-        if score_4y >= score_3y + _WINDOW_OVERRIDE_MIN_DELTA:
-            selected_window = "4Y"
-            best_name = best_4y
-            selected_cums = cums_4y
-        elif score_3y > score_4y:
-            selected_window = "3Y"
-            best_name = best_3y
-            selected_cums = cums_3y
-        else:
-            # very close → prefer 4Y for stability
-            selected_window = "4Y"
-            best_name = best_4y
-            selected_cums = cums_4y
-
-    elif has_4y:
-        selected_window = "4Y"
-        best_name = best_4y
-        selected_cums = cums_4y
-
-    elif has_3y:
-        selected_window = "3Y"
-        best_name = best_3y
-        selected_cums = cums_3y
+    # Strict selector basis = best realised cumulative return over the last 2 years
+    if best_2y_score is not None:
+        selected_window = "2Y"
+        best_name = best_2y
+        selected_cums = cums_2y
+    else:
+        # No valid 2Y trade history -> neutral fallback, not FULL and not 1Y
+        selected_window = "2Y"
+        best_name = "S0_BASE"
+        selected_cums = cums_2y
 
     payload = {
         "ticker": ticker,
@@ -450,6 +472,14 @@ def select_strategy(
         "cums_3y": {
             k: round(v * 100, 2) if v is not None else None
             for k, v in cums_3y.items()
+        },
+        "cums_2y": {
+            k: round(v * 100, 2) if v is not None else None
+            for k, v in cums_2y.items()
+        },
+        "cums_1y": {
+            k: round(v * 100, 2) if v is not None else None
+            for k, v in cums_1y.items()
         },
         "best_full": best_full,
         "best_4y": best_4y,
