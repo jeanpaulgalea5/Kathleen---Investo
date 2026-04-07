@@ -138,6 +138,16 @@ def _fmt_num(x: Any, digits: int = 2, suffix: str = "") -> str:
 def _fmt_pct(x: Any, digits: int = 2) -> str:
     return _fmt_num(x, digits=digits, suffix="%")
 
+def _annualise_compounded_return(total_pct: Any, years: float) -> Optional[float]:
+    r = _safe_float(total_pct)
+    if r is None or years <= 0:
+        return None
+
+    gross = 1.0 + (r / 100.0)
+    if gross <= 0:
+        return None
+
+    return ((gross ** (1.0 / years)) - 1.0) * 100.0
 
 def _fmt_qty(x: Any) -> str:
     v = _safe_float(x)
@@ -1551,15 +1561,17 @@ def _read_strategy_health(data_dir: str, ticker: str) -> dict[str, Any]:
     """
     Read recent strategy health from adaptive strategy cache.
 
-    Broken = negative on both 4Y and 3Y.
+    BROKEN rule:
+    - broken if 2Y annualised compounded return is below 15% per annum
+
     This is a dashboard execution filter, not a selector change.
     """
     path = _strategy_cache_path(data_dir, ticker)
     if not path.exists():
         return {
             "decision_window": "",
-            "pct_4y": None,
-            "pct_3y": None,
+            "pct_2y": None,
+            "pct_2y_annualised": None,
             "broken": False,
             "health_label": "",
         }
@@ -1569,34 +1581,33 @@ def _read_strategy_health(data_dir: str, ticker: str) -> dict[str, Any]:
     except Exception:
         return {
             "decision_window": "",
-            "pct_4y": None,
-            "pct_3y": None,
+            "pct_2y": None,
+            "pct_2y_annualised": None,
             "broken": False,
             "health_label": "",
         }
 
-    pct_4y = _safe_float(payload.get("cums_4y", {}).get(payload.get("best_4y")))
-    pct_3y = _safe_float(payload.get("cums_3y", {}).get(payload.get("best_3y")))
+    pct_2y = _safe_float(payload.get("cums_2y", {}).get(payload.get("best")))
+    pct_2y_annualised = _annualise_compounded_return(pct_2y, 2.0)
+
     decision_window = str(payload.get("decision_window", "") or "").strip().upper()
 
     broken = (
-        pct_4y is not None
-        and pct_3y is not None
-        and pct_4y < 0
-        and pct_3y < 0
+        pct_2y_annualised is not None
+        and pct_2y_annualised < 15.0
     )
 
     if broken:
         health_label = "BROKEN"
-    elif pct_4y is not None and pct_3y is not None:
+    elif pct_2y_annualised is not None:
         health_label = "OK"
     else:
         health_label = ""
 
     return {
         "decision_window": decision_window,
-        "pct_4y": pct_4y,
-        "pct_3y": pct_3y,
+        "pct_2y": pct_2y,
+        "pct_2y_annualised": pct_2y_annualised,
         "broken": broken,
         "health_label": health_label,
     }
@@ -2020,7 +2031,7 @@ def _build_html(
         "Ticker",
         "Name",
         "Platform",
-        "Quantity",
+        "Quanti    ty",
         "Currency",
         "Net Cost",
         "P/L %",
@@ -2039,8 +2050,8 @@ def _build_html(
         "Name",
         "Strategy Used",
         "Decision Window",
-        "4Y Strategy Return %",
-        "3Y Strategy Return %",
+        "2Y Strategy Return %",
+        "2Y Annualised %",
         "Recent Strategy Health",
         "Broken",
         "Status",
@@ -2535,8 +2546,8 @@ def _build_monitor_row(
 
     strategy_health = {
         "decision_window": "",
-        "pct_4y": None,
-        "pct_3y": None,
+        "pct_2y": None,
+        "pct_2y_annualised": None,
         "broken": False,
         "health_label": "",
     }
@@ -2552,8 +2563,8 @@ def _build_monitor_row(
         "Currency": currency,
         "Strategy Used": strategy_used,
         "Decision Window": strategy_health.get("decision_window", ""),
-        "4Y Strategy Return %": _fmt_pct(strategy_health.get("pct_4y"), 1),
-        "3Y Strategy Return %": _fmt_pct(strategy_health.get("pct_3y"), 1),
+        "2Y Strategy Return %": _fmt_pct(strategy_health.get("pct_2y"), 1),
+        "2Y Annualised %": _fmt_pct(strategy_health.get("pct_2y_annualised"), 1),
         "Recent Strategy Health": strategy_health.get("health_label", ""),
         "Broken": "YES" if strategy_health.get("broken", False) else "",
         "Status": status,
