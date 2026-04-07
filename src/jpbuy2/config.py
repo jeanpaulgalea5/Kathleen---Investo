@@ -135,16 +135,20 @@ def settings_for_ticker(ticker: str, asset_type: AssetType) -> Settings:
         from .data.yahoo import fetch_ohlcv
         from .strategy_select import settings_adaptive
 
+        from datetime import datetime, timedelta
+
+        lookback_start = (datetime.utcnow() - timedelta(days=6 * 365)).strftime("%Y-%m-%d")
+
         df_w = fetch_ohlcv(
             ticker,
-            start="2010-01-01",
+            start=lookback_start,
             end=None,
             interval="1wk",
             data_dir="data",
         )
         df_d = fetch_ohlcv(
             ticker,
-            start="2010-01-01",
+            start=lookback_start,
             end=None,
             interval="1d",
             data_dir="data",
