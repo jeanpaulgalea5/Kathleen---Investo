@@ -81,10 +81,12 @@ def warm_ticker(ticker: str, data_dir: str, force: bool, min_trades: int) -> dic
     cums_full = cache_data.get("cums_full", {})
     cums_4y = cache_data.get("cums_4y", {})
     cums_3y = cache_data.get("cums_3y", {})
+    cums_2y = cache_data.get("cums_2y", {})
 
     full_pct = cums_full.get(best_full) if best_full else None
     pct_4y = cums_4y.get(best_4y) if best_4y else None
     pct_3y = cums_3y.get(best_3y) if best_3y else None
+    pct_2y = cums_2y.get(best) if best else None
   
     # Full-history net P/L on the selected strategy
     from jpbuy2.backtest.engine import run_backtest
@@ -115,6 +117,7 @@ def warm_ticker(ticker: str, data_dir: str, force: bool, min_trades: int) -> dic
         "full_pct": round(full_pct, 1) if full_pct is not None else None,
         "pct_4y":   round(pct_4y, 1) if pct_4y is not None else None,
         "pct_3y":   round(pct_3y, 1) if pct_3y is not None else None,
+        "pct_2y":   round(pct_2y, 1) if pct_2y is not None else None,
         "net_full": round(net_full) if net_full is not None else None,
         "override": ovr,
         "elapsed":  round(elapsed, 1),
@@ -144,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
     total = len(tickers)
     print(f"\nWarming strategy cache — {total} tickers  "
           f"({'force recompute' if args.force else 'skipping cached'})\n")
-    print(f"  {'Ticker':<14} {'Status':<10} {'Strategy':<20} {'Full%':>7} {'4Y%':>7} {'3Y%':>7} {'Net Full€':>11}  {'Window'}")
+    print(f"  {'Ticker':<14} {'Status':<10} {'Strategy':<20} {'Full%':>7} {'4Y%':>7} {'3Y%':>7} {'2Y%':>7} {'Net Full€':>11}  {'Window'}")
     print("  " + "-" * 110)
 
     computed = cached = skipped = 0
@@ -157,10 +160,11 @@ def main(argv: list[str] | None = None) -> int:
             full_pct = f"{r['full_pct']:>+6.1f}%" if r.get('full_pct') is not None else "      —"
             pct_4y   = f"{r['pct_4y']:>+6.1f}%"   if r.get('pct_4y')   is not None else "      —"
             pct_3y   = f"{r['pct_3y']:>+6.1f}%"   if r.get('pct_3y')   is not None else "      —"
+            pct_2y   = f"{r['pct_2y']:>+6.1f}%"   if r.get('pct_2y')   is not None else "      —"
             net_full = f"{r['net_full']:>+10,.0f}€" if r.get('net_full') is not None else "          —"
             ovr      = r.get('override') or ""
             line = (f"  {ticker:<14} {'computed':<10} {r['best']:<20} "
-                    f"{full_pct} {pct_4y} {pct_3y} {net_full}  {ovr}  {r['elapsed']:.1f}s")
+                    f"{full_pct} {pct_4y} {pct_3y} {pct_2y} {net_full}  {ovr}  {r['elapsed']:.1f}s")
         elif st == "cache_hit":
             cached += 1
             line = f"  {ticker:<14} {'cached':<10} (skipped — up to date)"
@@ -177,9 +181,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"    Full%     = full-history reference only")
     print(f"    4Y%       = best 4Y-window strategy cumulative return")
     print(f"    3Y%       = best 3Y-window strategy cumulative return")
+    print(f"    2Y%       = selected strategy cumulative return over the last 2 years")
     print(f"    Net Full€ = total net P/L full history on €10,000/trade")
-    print(f"    Window    = actual decision window chosen between 4Y and 3Y")
-    print(f"                 FULL is used only if both recent windows are invalid\n")
+    print(f"    Window    = selector basis now standardised to 2Y")
+    print(f"                 Technicals use full history; selection uses best 2Y return\n")
     return 0
 
 
