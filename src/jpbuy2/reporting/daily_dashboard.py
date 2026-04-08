@@ -1594,7 +1594,7 @@ def _read_strategy_health(data_dir: str, ticker: str) -> dict[str, Any]:
 
     broken = (
         pct_2y_annualised is not None
-        and pct_2y_annualised < 15.0
+        and pct_2y_annualised < 11.0
     )
 
     if broken:
