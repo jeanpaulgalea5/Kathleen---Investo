@@ -40,7 +40,15 @@ def load_daily(ticker: str, data_dir: str) -> pd.DataFrame | None:
     df.columns = [c.lower().replace(" ", "_") for c in df.columns]
     return df.sort_index().dropna(subset=["close", "high", "low"])
 
-
+def load_weekly(ticker: str, data_dir: str):
+    safe = ticker.replace("/", "_").replace("\\", "_")
+    path = Path(data_dir) / "raw" / "weekly" / f"{safe}.csv"
+    if not path.exists():
+        return None
+    df = pd.read_csv(path, index_col=0, parse_dates=True)
+    df.columns = [c.lower().replace(" ", "_") for c in df.columns]
+    return df.sort_index().dropna(subset=["close", "high", "low"])
+  
 def to_weekly(df_d: pd.DataFrame) -> pd.DataFrame:
     df_d.index = pd.to_datetime(df_d.index)
     return df_d.resample("W-FRI").agg(
@@ -58,7 +66,9 @@ def warm_ticker(ticker: str, data_dir: str, force: bool, min_trades: int) -> dic
     if len(df_d) < 260:
         return {"ticker": ticker, "status": "too_short", "best": None}
 
-    df_w = to_weekly(df_d)
+    df_w = load_weekly(ticker, data_dir)
+    if df_w is None:
+        return {"ticker": ticker, "status": "no_weekly", "best": None}
     if len(df_w) < 60:
         return {"ticker": ticker, "status": "too_short", "best": None}
 
