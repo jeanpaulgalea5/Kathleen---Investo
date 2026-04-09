@@ -1,0 +1,4 @@
+ticker,commodity_type,date,signal,close,rsi14,drawdown,drawdown_entry_th,drawdown_overshoot_x,drawdown_overshoot_label,macd_hist,structural_bull,primed,reason
+XAD5.MI,gold,2026-04-07,STRONG_BUY,385.3500061035156,45.49414253125379,0.10535603214388727,0.045696005399625636,2.31,exceptional,0.017959550377330658,True,False,"commodity_type=gold, structural_bull, deep_dip, turn_confirm, rsi14=45.49, dd=0.105, dd_th=0.046"
+XAG,silver,2026-04-02,WAIT,61.554938,42.940536147583906,0.19726751700189243,0.09043792892285274,2.18,exceptional,-0.008749925391684066,True,False,"commodity_type=silver, structural_bull, deep_dip, rsi14=42.94, dd=0.197, dd_th=0.090"
+XAU,gold,2026-04-02,STRONG_BUY,4040.783246,46.50522536028356,0.10238203755404064,0.04902741796801738,2.09,exceptional,-3.032771073828485,True,False,"commodity_type=gold, structural_bull, deep_dip, turn_confirm, rsi14=46.51, dd=0.102, dd_th=0.049"
