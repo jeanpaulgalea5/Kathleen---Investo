@@ -893,23 +893,25 @@ def _dashboard_status_label(
     use_break_of_stabilisation_high: bool,
 ) -> str:
     """
-    Dashboard status should reflect execution reality.
+    Temporary dashboard rule for stocks:
 
-    Silver Window is informational only and must not gate BUY/BLOCKED/ARMED.
-    Execution is driven by Golden + Silver BUY (+ blocker / breakout mode).
+    BUY is shown only when:
+      - Golden = ON
+      - Silver Window = OPEN
+
+    Silver remains informative only for now and does not yet gate BUY
+    until separately revalidated through fresh backtests.
     """
     if not golden_on:
         return "WAIT"
 
-    if blocked and silver_buy:
+    if not silver_window:
+        return "WATCH"
+
+    if blocked:
         return "BLOCKED"
 
-    if silver_buy:
-        if use_break_of_stabilisation_high:
-            return "ARMED"
-        return "BUY"
-
-    return "WATCH"
+    return "BUY"
     
 def _reconstruct_engine_entry_state(
     *,
@@ -2058,8 +2060,8 @@ def _build_html(
         "Price",
         "1D %",
         "Golden",
-        "Silver",
         "Silver Window",
+        "Silver",
         "Entry Zone",
         "Weekly RSI",
         "Daily RSI",
@@ -2320,6 +2322,7 @@ def _build_monitor_row(
     target_price: Any = None,
     held_tickers: set[str] | None = None,
 ) -> dict[str, Any]:
+    print(f"[BUILD_ROW] ticker={ticker} asset_type={asset_type}")
     source_ticker = _market_data_ticker(ticker, asset_type)
     
     if _is_non_gold_etf(asset_type=asset_type, ticker=ticker, name=name):
@@ -2336,7 +2339,8 @@ def _build_monitor_row(
 
     df_w = fetch_ohlcv(source_ticker, start=start, end=end, interval="1wk", data_dir=data_dir)
     df_d = fetch_ohlcv(source_ticker, start=start, end=end, interval="1d", data_dir=data_dir)
-
+    print(f"[BUILD_ROW] fetched data ticker={ticker} weekly_rows={len(df_w) if df_w is not None else 0} daily_rows={len(df_d) if df_d is not None else 0}")
+    
     asset_type_norm = str(asset_type or "").strip().lower()
     strategy_used = ""
 
@@ -2349,6 +2353,8 @@ def _build_monitor_row(
         )
     else:
         s = settings_for(asset_type)  # type: ignore[arg-type]
+
+    print(f"[BUILD_ROW] strategy selected ticker={ticker} strategy={strategy_used}")
 
     df_i = None
     if bool(getattr(s, "use_intraday_emergency_exit", False)):
@@ -2382,12 +2388,14 @@ def _build_monitor_row(
         asset_type=asset_type,
         s=s,
     )
-
+    print(f"[BUILD_ROW] engine state ticker={ticker} state={engine_state.get('state')}")
+    
     backtest_error = ""
 
     try:
         bt = run_backtest(df_d, df_w, asset_type, s, ticker=ticker, df_i=df_i)  # type: ignore[arg-type]
         trades = bt.get("trades", []) or []
+        print(f"[BUILD_ROW] backtest done ticker={ticker} trades={len(trades)}")
     except ValueError as exc:
         if "Not enough history to backtest." in str(exc):
             bt = {"trades": []}
@@ -2446,16 +2454,24 @@ def _build_monitor_row(
 
     raw_engine_state = str(engine_state.get("state", "WAIT")).upper()
 
+    # TEMPORARY DASHBOARD RULE
+    # BUY is shown only when:
+    #   - Golden = ON
+    #   - Silver Window = OPEN
+    #
+    # Silver remains visible as an informative refinement column only
+    # until separately validated through fresh backtests.
+
     if held_now and not golden_on:
         status = "EXIT NOW"
     elif not golden_on:
         status = "WAIT"
-    elif blocked and silver_buy:
-        status = "BLOCKED"
-    elif (not held_now) and golden_on and silver_buy:
-        status = "BUY"
     elif held_now and golden_on:
         status = "IN_POS"
+    elif blocked and golden_on and silver_window:
+        status = "BLOCKED"
+    elif (not held_now) and golden_on and silver_window:
+        status = "BUY"
     else:
         status = "WATCH"
 
@@ -2648,8 +2664,10 @@ def generate_daily_dashboard(
         currency = str(r.get("Currency", "") or "").strip()
         target_price = r.get("Target Price", None)
 
-        rows.append(
-            _build_monitor_row(
+        print(f"[DASHBOARD] START ticker={ticker} type={asset_type}")
+
+        try:
+            row = _build_monitor_row(
                 data_dir=data_dir,
                 start=start,
                 end=end,
@@ -2661,7 +2679,11 @@ def generate_daily_dashboard(
                 target_price=target_price,
                 held_tickers=held_tickers,
             )
-        )
+            rows.append(row)
+            print(f"[DASHBOARD] DONE  ticker={ticker} status={row.get('Status', '')}")
+        except Exception as exc:
+            print(f"[DASHBOARD] FAIL  ticker={ticker} error={exc}")
+            raise
 
     monitor_df = pd.DataFrame(rows)
 
