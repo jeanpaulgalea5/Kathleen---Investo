@@ -1,12 +1,12 @@
 {
-  "watchlist_count": 72,
-  "success_count": 70,
+  "watchlist_count": 73,
+  "success_count": 71,
   "failure_count": 2,
   "stale_count": 18,
   "failed_tickers": [
     {
       "ticker": "XAG",
-      "error": "Failed to fetch OHLCV for XAG=X interval=1d. Yahoo error was: ValueError('No data returned for XAG=X interval=1d (attempt 3)'). Yahoo HTTP fallback error was: ValueError('Yahoo HTTP chart request failed for XAG=X: HTTP Error 404: Not Found'). Stooq fallback error was: ValueError(\"Stooq CSV missing 'Date' column for XAG=X.US. Columns=['write to www@stooq.com if you want to use our data', 'describing your project', 'the types of instruments needed', 'and optionally providing the name of the website where the data would be published.']\")."
+      "error": "Failed to fetch OHLCV for XAG=X interval=1d. Yahoo error was: ValueError('No data returned for XAG=X interval=1d (attempt 3)'). Yahoo HTTP fallback error was: ValueError('Yahoo HTTP chart request failed for XAG=X: HTTP Error 404: Not Found'). Stooq fallback error was: ParserError('Error tokenizing data. C error: Expected 1 fields in line 6, saw 2\\n')."
     },
     {
       "ticker": "XAU",
@@ -14,5 +14,5 @@
     }
   ],
   "start": "2010-01-01",
-  "end": "2026-04-10"
+  "end": "2026-04-11"
 }
