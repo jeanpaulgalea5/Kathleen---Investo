@@ -695,7 +695,7 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
         name = g["Name"].iloc[-1]
         ccy = g["Currency"].dropna().iloc[-1] if g["Currency"].dropna().size else "EUR"
 
-        # ---------- Reconstruct opening state at 1 Jan ----------
+        # Opening state at 1 Jan
         opening_units = 0.0
         opening_cost_eur = 0.0
 
@@ -703,25 +703,24 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
         running_cost_eur = 0.0
 
         for r in g.itertuples(index=False):
-            qty = float(getattr(r, "Quantity", 0.0) or 0.0)
-            status = str(getattr(r, "Status", "")).lower()
             dt = getattr(r, "Date", pd.NaT)
             d = pd.Timestamp(dt).date() if pd.notna(dt) else None
-            total_eur = float(getattr(r, "TotalCost_EUR", 0.0) or 0.0)
-            charges = float(getattr(r, "Charges", 0.0) or 0.0)
-
             if d is None or d >= y0:
                 break
 
+            qty = float(getattr(r, "Quantity", 0.0) or 0.0)
             if qty == 0:
                 continue
+
+            status = str(getattr(r, "Status", "")).lower()
+            total_eur = float(getattr(r, "TotalCost_EUR", 0.0) or 0.0)
+            charges = float(getattr(r, "Charges", 0.0) or 0.0)
 
             if status.startswith("bought"):
                 running_units += qty
                 running_cost_eur += total_eur + charges
 
             elif status.startswith("sold"):
-                proceeds = total_eur - charges
                 if abs(running_units) > UNITS_EPS:
                     avg_cost = running_cost_eur / running_units
                     cost_sold = avg_cost * qty
@@ -733,36 +732,54 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
         opening_units = running_units
         opening_cost_eur = running_cost_eur
 
-        # ---------- Reconstruct ending state now ----------
-        ending_units = opening_units
-        ending_cost_eur = opening_cost_eur
+        # Current-year flows and ending accounting state
+        buys_eur = 0.0
+        sells_eur = 0.0
+        realised_ytd_eur = 0.0
+
+        accounting_units = opening_units
+        accounting_cost_eur = opening_cost_eur
 
         for r in g.itertuples(index=False):
-            qty = float(getattr(r, "Quantity", 0.0) or 0.0)
-            status = str(getattr(r, "Status", "")).lower()
             dt = getattr(r, "Date", pd.NaT)
             d = pd.Timestamp(dt).date() if pd.notna(dt) else None
+            if d is None or d < y0 or d > asof:
+                continue
+
+            qty = float(getattr(r, "Quantity", 0.0) or 0.0)
+            if qty == 0:
+                continue
+
+            status = str(getattr(r, "Status", "")).lower()
             total_eur = float(getattr(r, "TotalCost_EUR", 0.0) or 0.0)
             charges = float(getattr(r, "Charges", 0.0) or 0.0)
 
-            if d is None or d < y0 or d > asof or qty == 0:
-                continue
-
             if status.startswith("bought"):
-                ending_units += qty
-                ending_cost_eur += total_eur + charges
+                cash = total_eur + charges
+                buys_eur += cash
+
+                accounting_units += qty
+                accounting_cost_eur += cash
 
             elif status.startswith("sold"):
-                if abs(ending_units) > UNITS_EPS:
-                    avg_cost = ending_cost_eur / ending_units
+                proceeds = total_eur - charges
+                sells_eur += proceeds
+
+                if abs(accounting_units) > UNITS_EPS:
+                    avg_cost = accounting_cost_eur / accounting_units
                     cost_sold = avg_cost * qty
-                    ending_units -= qty
-                    ending_cost_eur -= cost_sold
+                    realised_ytd_eur += proceeds - cost_sold
+                    accounting_units -= qty
+                    accounting_cost_eur -= cost_sold
                 else:
-                    ending_units -= qty
+                    realised_ytd_eur += proceeds
+                    accounting_units -= qty
+
+        ending_units = accounting_units
 
         price_ticker, price_ccy = _price_feed(code, ccy)
 
+        # Start value at 1 Jan
         if abs(opening_units) <= UNITS_EPS:
             start_value_eur: Optional[float] = 0.0
         else:
@@ -770,6 +787,7 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
             start_fx = _fx_ccy_per_eur_on_or_after(price_ccy, y0)
             start_value_eur = None if start_px is None else _ccy_to_eur(opening_units * start_px, price_ccy, start_fx)
 
+        # End value now
         if abs(ending_units) <= UNITS_EPS:
             end_value_eur: Optional[float] = 0.0
         else:
@@ -777,114 +795,53 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
             end_fx = _fx_ccy_per_eur(price_ccy)
             end_value_eur = None if end_px is None else _ccy_to_eur(ending_units * end_px, price_ccy, end_fx)
 
-        buys_eur = 0.0
-        sells_eur = 0.0
-        realised_ytd_eur = 0.0
+        # Portfolio-level MWR flows
         flows: List[Tuple[date, float]] = []
-
         if start_value_eur is not None and math.isfinite(float(start_value_eur)) and float(start_value_eur) != 0.0:
             flows.append((y0, -float(start_value_eur)))
             portfolio_flows[y0] = portfolio_flows.get(y0, 0.0) - float(start_value_eur)
 
-        # Accounting layer for realised
-        accounting_units = opening_units
-        accounting_cost = opening_cost_eur
-
-        # Performance lots for YTD unrealised
-        perf_open_units_remaining = opening_units
-        opening_value_per_unit_eur = (
-            float(start_value_eur) / opening_units
-            if start_value_eur is not None and abs(opening_units) > UNITS_EPS
-            else 0.0
-        )
-        current_year_buy_lots: List[dict] = []
-
         for r in g.itertuples(index=False):
-            qty = float(getattr(r, "Quantity", 0.0) or 0.0)
-            status = str(getattr(r, "Status", "")).lower()
             dt = getattr(r, "Date", pd.NaT)
             d = pd.Timestamp(dt).date() if pd.notna(dt) else None
+            if d is None or d < y0 or d > asof:
+                continue
+
+            qty = float(getattr(r, "Quantity", 0.0) or 0.0)
+            if qty == 0:
+                continue
+
+            status = str(getattr(r, "Status", "")).lower()
             total_eur = float(getattr(r, "TotalCost_EUR", 0.0) or 0.0)
             charges = float(getattr(r, "Charges", 0.0) or 0.0)
 
-            if d is None or d < y0 or d > asof or qty == 0:
-                continue
-
             if status.startswith("bought"):
                 cash = total_eur + charges
-                buys_eur += cash
                 flows.append((d, -cash))
                 portfolio_flows[d] = portfolio_flows.get(d, 0.0) - cash
 
-                accounting_units += qty
-                accounting_cost += cash
-
-                current_year_buy_lots.append({"units": qty, "cost_eur": cash})
-
             elif status.startswith("sold"):
                 proceeds = total_eur - charges
-                sells_eur += proceeds
                 flows.append((d, proceeds))
                 portfolio_flows[d] = portfolio_flows.get(d, 0.0) + proceeds
-
-                # realised YTD on historic cost basis
-                if abs(accounting_units) > UNITS_EPS:
-                    avg_cost = accounting_cost / accounting_units
-                    cost_sold = avg_cost * qty
-                    realised_ytd_eur += proceeds - cost_sold
-                    accounting_units -= qty
-                    accounting_cost -= cost_sold
-                else:
-                    realised_ytd_eur += proceeds
-
-                # consume performance layer: opening units first, then current-year buys
-                qty_left = qty
-
-                if qty_left > UNITS_EPS and perf_open_units_remaining > UNITS_EPS:
-                    used = min(perf_open_units_remaining, qty_left)
-                    perf_open_units_remaining -= used
-                    qty_left -= used
-
-                if qty_left > UNITS_EPS:
-                    for lot in current_year_buy_lots:
-                        lot_units = float(lot["units"])
-                        if lot_units <= UNITS_EPS:
-                            continue
-                        used = min(lot_units, qty_left)
-                        lot_cost_per_unit = float(lot["cost_eur"]) / lot_units if lot_units > UNITS_EPS else 0.0
-                        lot["units"] = lot_units - used
-                        lot["cost_eur"] = float(lot["cost_eur"]) - (used * lot_cost_per_unit)
-                        qty_left -= used
-                        if qty_left <= UNITS_EPS:
-                            break
 
         if end_value_eur is not None and math.isfinite(float(end_value_eur)) and float(end_value_eur) != 0.0:
             flows.append((asof, float(end_value_eur)))
             portfolio_flows[asof] = portfolio_flows.get(asof, 0.0) + float(end_value_eur)
 
-        unrealised_ytd_eur = None
-        if end_value_eur is not None:
-            remaining_current_year_units = sum(float(lot["units"]) for lot in current_year_buy_lots)
-            remaining_units = float(perf_open_units_remaining) + remaining_current_year_units
-
-            current_value_per_unit_eur = (
-                float(end_value_eur) / remaining_units
-                if abs(remaining_units) > UNITS_EPS
-                else 0.0
-            )
-
-            opening_layer_current_value = perf_open_units_remaining * current_value_per_unit_eur
-            opening_layer_start_value = perf_open_units_remaining * opening_value_per_unit_eur
-
-            current_year_layer_current_value = remaining_current_year_units * current_value_per_unit_eur
-            current_year_layer_cost = sum(float(lot["cost_eur"]) for lot in current_year_buy_lots)
-
+        # Core YTD definitions
+        if end_value_eur is None or start_value_eur is None:
+            unrealised_ytd_eur = math.nan
+            total_return_eur = math.nan
+        else:
             unrealised_ytd_eur = (
-                (opening_layer_current_value - opening_layer_start_value)
-                + (current_year_layer_current_value - current_year_layer_cost)
+                float(end_value_eur)
+                - float(start_value_eur)
+                - float(buys_eur)
+                + float(sells_eur)
+                - float(realised_ytd_eur)
             )
-
-        total_return_eur = None if unrealised_ytd_eur is None else (float(realised_ytd_eur) + float(unrealised_ytd_eur))
+            total_return_eur = float(realised_ytd_eur) + float(unrealised_ytd_eur)
 
         xirr_ann = _xirr(flows)
         days_elapsed = max((asof - y0).days, 1)
@@ -899,11 +856,10 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
 
         simple_base_eur = None
         simple_return_pct = None
-
         if start_value_eur is not None:
             simple_base_eur = float(start_value_eur) + float(buys_eur)
 
-        if simple_base_eur is not None and simple_base_eur > 0 and total_return_eur is not None:
+        if simple_base_eur is not None and simple_base_eur > 0 and not pd.isna(total_return_eur):
             simple_return_pct = (float(total_return_eur) / float(simple_base_eur)) * 100.0
 
         rows.append(
@@ -924,6 +880,45 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
                 "MWR % (ann.)": mwr_ann_pct,
             }
         )
+
+    ytd_df = pd.DataFrame(rows)
+    if ytd_df.empty:
+        return ytd_df, None
+
+    sum_cols = [
+        "Start value (EUR)",
+        "Buys (EUR)",
+        "Sells (EUR)",
+        "End value (EUR)",
+        "Realised YTD (EUR)",
+        "Unrealised YTD (EUR)",
+        "Total return YTD (EUR)",
+    ]
+
+    totals = {"Investment": "TOTAL (priced only)", "Code": "", "Platform": "", "Ccy": ""}
+    for c in sum_cols:
+        totals[c] = float(pd.to_numeric(ytd_df[c], errors="coerce").sum(min_count=1))
+
+    total_base = totals.get("Start value (EUR)", 0.0) + totals.get("Buys (EUR)", 0.0)
+    if total_base and total_base > 0:
+        totals["Simple Return %"] = (totals.get("Total return YTD (EUR)", 0.0) / total_base) * 100.0
+    else:
+        totals["Simple Return %"] = math.nan
+
+    port_flows = sorted([(d, a) for d, a in portfolio_flows.items() if a != 0.0], key=lambda x: x[0])
+    port_xirr = _xirr(port_flows)
+    totals["MWR % (YTD)"] = (((1.0 + port_xirr) ** ((asof - y0).days / 365.0) - 1.0) * 100.0) if port_xirr is not None else math.nan
+    totals["MWR % (ann.)"] = (port_xirr * 100.0) if port_xirr is not None else math.nan
+
+    ytd_df = pd.concat([ytd_df, pd.DataFrame([totals])], ignore_index=True)
+
+    if len(ytd_df) > 1:
+        body = ytd_df.iloc[:-1].copy()
+        body["__mwr_ytd"] = pd.to_numeric(body.get("MWR % (YTD)"), errors="coerce")
+        body = body.sort_values(["__mwr_ytd"], ascending=False, na_position="last").drop(columns=["__mwr_ytd"], errors="ignore")
+        ytd_df = pd.concat([body, ytd_df.iloc[[-1]]], ignore_index=True)
+
+    return ytd_df, port_xirr
       
     ytd_df = pd.DataFrame(rows)
     if ytd_df.empty:
