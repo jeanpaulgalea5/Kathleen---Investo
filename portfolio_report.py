@@ -195,7 +195,7 @@ def _safe_last_close(ticker: str) -> Optional[float]:
         return None
 
 
-def _safe_close_on_or_after(ticker: str, target: date) -> Optional[float]:
+def _safe_close_on_or_after(ticker: str, target: date | pd.Timestamp) -> Optional[float]:
     if yf is None:
         return None
 
@@ -203,9 +203,11 @@ def _safe_close_on_or_after(ticker: str, target: date) -> Optional[float]:
     if not t:
         return None
 
+    target_ts = pd.Timestamp(target).normalize()
+
     try:
-        start = pd.Timestamp(target - timedelta(days=7))
-        end = pd.Timestamp(target + timedelta(days=10))
+        start = target_ts - pd.Timedelta(days=10)
+        end = target_ts + pd.Timedelta(days=20)
 
         df = yf.download(
             t,
@@ -219,16 +221,16 @@ def _safe_close_on_or_after(ticker: str, target: date) -> Optional[float]:
         )
         s = _extract_close_series(df)
         if s is not None:
-            s.index = pd.to_datetime(s.index)
-            s = s[s.index.date >= target]
+            s.index = pd.to_datetime(s.index).tz_localize(None)
+            s = s[s.index >= target_ts]
             if not s.empty:
                 return _adjust_yahoo_price_units(t, float(s.iloc[0]))
 
         h = yf.Ticker(t).history(start=start, end=end, auto_adjust=False)
         s = _extract_close_series(h)
         if s is not None:
-            s.index = pd.to_datetime(s.index)
-            s = s[s.index.date >= target]
+            s.index = pd.to_datetime(s.index).tz_localize(None)
+            s = s[s.index >= target_ts]
             if not s.empty:
                 return _adjust_yahoo_price_units(t, float(s.iloc[0]))
 
@@ -915,7 +917,11 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
 
         if simple_base_eur is not None and simple_base_eur > 0 and total_return_eur is not None:
             simple_return_pct = (float(total_return_eur) / float(simple_base_eur)) * 100.0
-
+        print(
+            f"[YTD DEBUG] code={code} platform={platform} "
+            f"opening_units={opening_units} buys_eur={buys_eur:.2f} sells_eur={sells_eur:.2f} "
+            f"ending_units={ending_units} start_value_eur={start_value_eur} end_value_eur={end_value_eur}"
+        )
         rows.append(
             {
                 "Investment": name,
