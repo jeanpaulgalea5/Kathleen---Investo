@@ -814,8 +814,8 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
             elif status.startswith("sold"):
                 proceeds = float(total_eur - charges)
                 sells_eur += proceeds
-                flows.append((asof.date(), float(end_value_eur)))
-                portfolio_flows[asof.date()] = portfolio_flows.get(asof.date(), 0.0) + float(end_value_eur)
+                flows.append((d, proceeds))
+                portfolio_flows[d] = portfolio_flows.get(d, 0.0) + proceeds
 
                 qty_to_match = float(qty)
 
@@ -870,8 +870,8 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
                             break
 
         if end_value_eur is not None and math.isfinite(float(end_value_eur)) and float(end_value_eur) != 0.0:
-            flows.append((asof, float(end_value_eur)))
-            portfolio_flows[asof] = portfolio_flows.get(asof, 0.0) + float(end_value_eur)
+          flows.append((asof.date(), float(end_value_eur)))
+          portfolio_flows[asof.date()] = portfolio_flows.get(asof.date(), 0.0) + float(end_value_eur)
 
         unrealised_ytd_eur = None
         if end_value_eur is not None:
