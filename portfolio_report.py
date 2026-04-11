@@ -52,10 +52,12 @@ SEND_VALUATION_EMAIL = os.getenv("SEND_VALUATION_EMAIL", "").strip().lower() in 
 UNITS_EPS = float(os.getenv("UNITS_EPS", "0.001"))
 REPORT_YEAR = int(os.getenv("REPORT_YEAR", str(datetime.now().year)))
 
-# Optional special mapping for XAU / gold proxy
-XAU_PROXY_TICKER = os.getenv("XAU_PROXY_TICKER", "XAUT-USD")
+# Commodity proxy mapping aligned with daily dashboard
+# XAU and XAG are sourced in USD and converted to EUR when needed.
+XAU_PROXY_TICKER = os.getenv("XAU_PROXY_TICKER", "GC=F")
 XAU_PROXY_CCY = os.getenv("XAU_PROXY_CCY", "USD")
-
+XAG_PROXY_TICKER = os.getenv("XAG_PROXY_TICKER", "SI=F")
+XAG_PROXY_CCY = os.getenv("XAG_PROXY_CCY", "USD")
 
 def _now_str() -> str:
     return datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -85,6 +87,9 @@ def _price_feed(code: str, holding_ccy: str) -> tuple[str, str]:
 
     if code_u == "XAU":
         return XAU_PROXY_TICKER, _norm_currency(XAU_PROXY_CCY)
+
+    if code_u == "XAG":
+        return XAG_PROXY_TICKER, _norm_currency(XAG_PROXY_CCY)
 
     if code_u.endswith("L.XC") and len(code_u) > 4:
         base = code_u[:-4]
@@ -677,22 +682,43 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
         name = g["Name"].iloc[-1]
         ccy = g["Currency"].dropna().iloc[-1] if g["Currency"].dropna().size else "EUR"
 
+        # Reconstruct opening position at 1 Jan and current ending units
+        # Reconstruct opening position at 1 Jan and current ending units
         units_start = 0.0
         units_end = 0.0
+        opening_cost_basis_eur = 0.0
+        opening_units_at_y0 = 0.0
+
+        running_units = 0.0
+        running_cost_eur = 0.0
+
         for r in g.itertuples(index=False):
             qty = float(getattr(r, "Quantity", 0.0) or 0.0)
             status = str(getattr(r, "Status", "")).lower()
             dt = getattr(r, "Date", pd.NaT)
             d = pd.Timestamp(dt).date() if pd.notna(dt) else None
+            total_eur = float(getattr(r, "TotalCost_EUR", 0.0) or 0.0)
+            charges = float(getattr(r, "Charges", 0.0) or 0.0)
 
             if status.startswith("bought"):
-                units_end += qty
-                if d is not None and d < y0:
-                    units_start += qty
+                running_units += qty
+                running_cost_eur += (total_eur + charges)
             elif status.startswith("sold"):
-                units_end -= qty
-                if d is not None and d < y0:
-                    units_start -= qty
+                proceeds = float(total_eur - charges)
+                if abs(running_units) > UNITS_EPS:
+                    avg_cost = running_cost_eur / running_units
+                    cost_sold = avg_cost * qty
+                    running_units -= qty
+                    running_cost_eur -= cost_sold
+                else:
+                    running_units -= qty
+
+            if d is not None and d < y0:
+                units_start = running_units
+                opening_units_at_y0 = running_units
+                opening_cost_basis_eur = running_cost_eur
+
+        units_end = running_units
 
         price_ticker, price_ccy = _price_feed(code, ccy)
 
@@ -718,9 +744,24 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
             flows.append((y0, -float(start_value_eur)))
             portfolio_flows[y0] = portfolio_flows.get(y0, 0.0) - float(start_value_eur)
 
-        basis_units = float(units_start) if abs(units_start) > UNITS_EPS else 0.0
-        basis_cost = float(start_value_eur) if (start_value_eur is not None and math.isfinite(float(start_value_eur))) else 0.0
+        # YTD layer tracking
         realised_ytd_eur = 0.0
+
+        # Accounting layer for realised P/L
+        accounting_open_units_remaining = float(units_start) if abs(units_start) > UNITS_EPS else 0.0
+        accounting_open_cost_remaining = float(opening_cost_basis_eur) if math.isfinite(float(opening_cost_basis_eur)) else 0.0
+
+        # Performance layer for YTD unrealised
+        perf_open_units_remaining = float(units_start) if abs(units_start) > UNITS_EPS else 0.0
+        opening_start_value_eur = float(start_value_eur or 0.0)
+        opening_value_per_unit_eur = (
+            opening_start_value_eur / perf_open_units_remaining
+            if abs(perf_open_units_remaining) > UNITS_EPS
+            else 0.0
+        )
+
+        current_year_buy_lots_accounting: list[dict[str, float]] = []
+        current_year_buy_lots_perf: list[dict[str, float]] = []
 
         for r in g.itertuples(index=False):
             status = str(getattr(r, "Status", "")).lower()
@@ -742,8 +783,12 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
                 flows.append((d, -cash))
                 portfolio_flows[d] = portfolio_flows.get(d, 0.0) - cash
 
-                basis_units += qty
-                basis_cost += cash
+                current_year_buy_lots_accounting.append(
+                    {"units": float(qty), "cost_eur": float(cash)}
+                )
+                current_year_buy_lots_perf.append(
+                    {"units": float(qty), "cost_eur": float(cash)}
+                )
 
             elif status.startswith("sold"):
                 proceeds = float(total_eur - charges)
@@ -751,20 +796,85 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
                 flows.append((d, proceeds))
                 portfolio_flows[d] = portfolio_flows.get(d, 0.0) + proceeds
 
-                if abs(basis_units) > UNITS_EPS:
-                    avg_cost = basis_cost / basis_units
-                    cost_sold = avg_cost * qty
-                    realised_ytd_eur += (proceeds - cost_sold)
-                    basis_units -= qty
-                    basis_cost -= cost_sold
-                else:
-                    realised_ytd_eur += proceeds
+                qty_to_match = float(qty)
+
+                # -------- accounting realised P/L --------
+                matched_accounting_cost_eur = 0.0
+                qty_left_accounting = qty_to_match
+
+                if qty_left_accounting > UNITS_EPS and accounting_open_units_remaining > UNITS_EPS:
+                    used = min(accounting_open_units_remaining, qty_left_accounting)
+                    avg_open_cost = (
+                        accounting_open_cost_remaining / accounting_open_units_remaining
+                        if accounting_open_units_remaining > UNITS_EPS else 0.0
+                    )
+                    matched_accounting_cost_eur += used * avg_open_cost
+                    accounting_open_units_remaining -= used
+                    accounting_open_cost_remaining -= used * avg_open_cost
+                    qty_left_accounting -= used
+
+                if qty_left_accounting > UNITS_EPS:
+                    for lot in current_year_buy_lots_accounting:
+                        lot_units = float(lot["units"])
+                        if lot_units <= UNITS_EPS:
+                            continue
+                        used = min(lot_units, qty_left_accounting)
+                        lot_cost_per_unit = float(lot["cost_eur"]) / lot_units if lot_units > UNITS_EPS else 0.0
+                        matched_accounting_cost_eur += used * lot_cost_per_unit
+                        lot["units"] = lot_units - used
+                        lot["cost_eur"] = float(lot["cost_eur"]) - (used * lot_cost_per_unit)
+                        qty_left_accounting -= used
+                        if qty_left_accounting <= UNITS_EPS:
+                            break
+
+                realised_ytd_eur += (proceeds - matched_accounting_cost_eur)
+
+                # -------- performance layer consumption for unrealised YTD --------
+                qty_left_perf = qty_to_match
+
+                if qty_left_perf > UNITS_EPS and perf_open_units_remaining > UNITS_EPS:
+                    used = min(perf_open_units_remaining, qty_left_perf)
+                    perf_open_units_remaining -= used
+                    qty_left_perf -= used
+
+                if qty_left_perf > UNITS_EPS:
+                    for lot in current_year_buy_lots_perf:
+                        lot_units = float(lot["units"])
+                        if lot_units <= UNITS_EPS:
+                            continue
+                        used = min(lot_units, qty_left_perf)
+                        lot_cost_per_unit = float(lot["cost_eur"]) / lot_units if lot_units > UNITS_EPS else 0.0
+                        lot["units"] = lot_units - used
+                        lot["cost_eur"] = float(lot["cost_eur"]) - (used * lot_cost_per_unit)
+                        qty_left_perf -= used
+                        if qty_left_perf <= UNITS_EPS:
+                            break
 
         if end_value_eur is not None and math.isfinite(float(end_value_eur)) and float(end_value_eur) != 0.0:
             flows.append((asof, float(end_value_eur)))
             portfolio_flows[asof] = portfolio_flows.get(asof, 0.0) + float(end_value_eur)
 
-        unrealised_ytd_eur = None if end_value_eur is None else (float(end_value_eur) - float(basis_cost))
+        unrealised_ytd_eur = None
+        if end_value_eur is not None:
+            remaining_perf_units = float(perf_open_units_remaining) + sum(float(lot["units"]) for lot in current_year_buy_lots_perf)
+
+            current_value_per_unit_eur = (
+                float(end_value_eur) / remaining_perf_units
+                if abs(remaining_perf_units) > UNITS_EPS
+                else 0.0
+            )
+
+            opening_layer_current_value = perf_open_units_remaining * current_value_per_unit_eur
+            opening_layer_start_value = perf_open_units_remaining * opening_value_per_unit_eur
+
+            current_year_layer_current_value = sum(float(lot["units"]) for lot in current_year_buy_lots_perf) * current_value_per_unit_eur
+            current_year_layer_cost = sum(float(lot["cost_eur"]) for lot in current_year_buy_lots_perf)
+
+            unrealised_ytd_eur = (
+                (opening_layer_current_value - opening_layer_start_value)
+                + (current_year_layer_current_value - current_year_layer_cost)
+            )
+
         total_return_eur = None if unrealised_ytd_eur is None else (float(realised_ytd_eur) + float(unrealised_ytd_eur))
 
         xirr_ann = _xirr(flows)
@@ -777,6 +887,19 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
         else:
             mwr_ann_pct = xirr_ann * 100.0
             mwr_ytd_pct = (((1.0 + xirr_ann) ** frac_year) - 1.0) * 100.0
+
+        simple_base_eur = None
+        simple_return_pct = None
+
+        if start_value_eur is not None:
+            simple_base_eur = float(start_value_eur) + float(buys_eur)
+
+        if (
+            simple_base_eur is not None
+            and simple_base_eur > 0
+            and total_return_eur is not None
+        ):
+            simple_return_pct = (float(total_return_eur) / float(simple_base_eur)) * 100.0
 
         rows.append(
             {
@@ -791,6 +914,7 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
                 "Realised YTD (EUR)": realised_ytd_eur,
                 "Unrealised YTD (EUR)": unrealised_ytd_eur,
                 "Total return YTD (EUR)": total_return_eur,
+                "Simple Return %": simple_return_pct,
                 "MWR % (YTD)": mwr_ytd_pct,
                 "MWR % (ann.)": mwr_ann_pct,
             }
@@ -830,6 +954,12 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
     for c in sum_cols:
         totals[c] = float(pd.to_numeric(ytd_df[c], errors="coerce").sum(min_count=1))
 
+    total_base = totals.get("Start value (EUR)", 0.0) + totals.get("Buys (EUR)", 0.0)
+    if total_base and total_base > 0:
+        totals["Simple Return %"] = (totals.get("Total return YTD (EUR)", 0.0) / total_base) * 100.0
+    else:
+        totals["Simple Return %"] = math.nan
+
     port_flows = sorted([(d, a) for d, a in portfolio_flows.items() if a != 0.0], key=lambda x: x[0])
     port_xirr = _xirr(port_flows)
     totals["MWR % (YTD)"] = (((1.0 + port_xirr) ** ((asof - y0).days / 365.0) - 1.0) * 100.0) if port_xirr is not None else math.nan
@@ -863,11 +993,16 @@ def _fmt(x, decimals=2) -> str:
 
 def _fmt_pct(x) -> str:
     try:
-        if x is None or (isinstance(x, float) and math.isnan(x)):
-            return "N/A"
-        return f"{float(x):,.2f}%"
+        if x is None:
+            return "—"
+        if isinstance(x, float) and math.isnan(x):
+            return "—"
+        v = float(x)
+        if abs(v) < 0.005:
+            v = 0.0
+        return f"{v:,.2f}%"
     except Exception:
-        return "N/A"
+        return "—"
 
 
 def _df_to_html(df: pd.DataFrame, pct_cols: Iterable[str] = ()) -> str:
@@ -900,18 +1035,158 @@ def write_html(
 
     asof = _now_str()
 
+    priced_val_eur = None
+    unrealised_eur = None
+    total_realised = None
+    simple_return_total = None
+    realised_ytd_total = None
+    unrealised_ytd_total = None
+
+    try:
+        if not valuation.empty:
+            totals_row = valuation[
+                valuation["Investment"].astype(str).str.startswith("TOTALS")
+            ]
+            if not totals_row.empty:
+                priced_val_eur = totals_row["Value (EUR)"].iloc[0]
+                unrealised_eur = totals_row["Unrealised (EUR)"].iloc[0]
+    except Exception:
+        pass
+
+    try:
+        if not realised_by_year.empty:
+            total_row = realised_by_year[
+                realised_by_year["Year"].astype(str).str.upper() == "TOTAL"
+            ]
+            if not total_row.empty:
+                total_realised = total_row["Realised P/L (EUR)"].iloc[0]
+    except Exception:
+        pass
+
+    try:
+        if not ytd.empty:
+            total_row = ytd[
+                ytd["Investment"].astype(str).str.startswith("TOTAL")
+            ]
+            if not total_row.empty:
+                if "Simple Return %" in total_row.columns:
+                    simple_return_total = total_row["Simple Return %"].iloc[0]
+                if "Realised YTD (EUR)" in total_row.columns:
+                    realised_ytd_total = total_row["Realised YTD (EUR)"].iloc[0]
+                if "Unrealised YTD (EUR)" in total_row.columns:
+                    unrealised_ytd_total = total_row["Unrealised YTD (EUR)"].iloc[0]
+    except Exception:
+        pass
+
+    def _fmt_cell(col: str, val) -> str:
+        if val is None or (isinstance(val, float) and math.isnan(val)):
+            return "<span class='muted'>N/A</span>"
+
+        if col in {"First buy", "First sell", "Last sell", "Date"}:
+            try:
+                dt = pd.to_datetime(val, errors="coerce")
+                if pd.notna(dt):
+                    return dt.strftime("%Y-%m-%d")
+            except Exception:
+                pass
+
+        if isinstance(val, str):
+            sval = val
+        elif col in {"Unrealised %", "Simple Return %", "MWR % (YTD)", "MWR % (ann.)"}:
+            sval = _fmt_pct(val)
+        else:
+            sval = _fmt(val, 2)
+
+        num = None
+        try:
+            if isinstance(val, (int, float)) and not math.isnan(float(val)):
+                num = float(val)
+            elif isinstance(val, str):
+                cleaned = val.replace("%", "").replace(",", "").strip()
+                num = float(cleaned)
+        except Exception:
+            num = None
+
+        pct_cols = {"Unrealised %", "Simple Return %", "MWR % (YTD)", "MWR % (ann.)"}
+        pnl_cols = {
+            "Unrealised (EUR)",
+            "Realised P/L (EUR)",
+            "Realised YTD (EUR)",
+            "Unrealised YTD (EUR)",
+            "Total return YTD (EUR)",
+        }
+
+        if col in pct_cols or col in pnl_cols:
+            if num is not None:
+                if abs(num) < 0.005:
+                    sval = "0.00%" if col in pct_cols else "0.00"
+                    return f"<span class='neutral'>{sval}</span>"
+                if num > 0:
+                    return f"<span class='pos'>{sval}</span>"
+                if num < 0:
+                    return f"<span class='neg'>{sval}</span>"
+
+        return str(sval)
+
+    def _table_html(df: pd.DataFrame, pct_cols: Iterable[str] = ()) -> str:
+        if df.empty:
+            return "<div class='muted'>N/A</div>"
+
+        cols = list(df.columns)
+        rows_html = []
+
+        for _, row in df.iterrows():
+            cells = []
+            for col in cols:
+                val = row.get(col, None)
+                cells.append(f"<td>{_fmt_cell(col, val)}</td>")
+            rows_html.append("<tr>" + "".join(cells) + "</tr>")
+
+        head = "".join(f"<th>{col}</th>" for col in cols)
+        return (
+            "<table class='report-table'>"
+            "<thead><tr>" + head + "</tr></thead>"
+            "<tbody>" + "".join(rows_html) + "</tbody>"
+            "</table>"
+        )
+
     realised_summary_block = f"""
-  <h2>Realised trades summary (grouped)</h2>
-  {_df_to_html(realised_summary, pct_cols=[])}
-"""
+    <div class="card section">
+      <h2>Realised trades summary</h2>
+      <div class="muted">Grouped realised trade outcome by position and year.</div>
+      {_table_html(realised_summary)}
+    </div>
+    """
+
     realised_trades_block = (
         f"""
-  <h2>Realised trade ledger (detail)</h2>
-  {_df_to_html(realised_trades, pct_cols=[])}
-"""
+        <div class="card section">
+          <h2>Realised trade ledger</h2>
+          <div class="muted">Detailed sell-side realised trade history.</div>
+          {_table_html(realised_trades)}
+        </div>
+        """
         if include_realised_trades_detail
         else ""
     )
+
+    def _fmt_chip_money(x, ccy: str = "EUR") -> str:
+        try:
+            if x is None or (isinstance(x, float) and math.isnan(x)):
+                return "—"
+
+            v = float(x)
+            symbol = "€" if str(ccy).upper() == "EUR" else f"{ccy} "
+
+            if abs(v) < 0.005:
+                v = 0.0
+
+            if v < 0:
+                return f"<span class='neg'>({symbol}{abs(v):,.2f})</span>"
+
+            return f"<span class='pos-neutral'>{symbol}{v:,.2f}</span>"
+        except Exception:
+            return "—"
 
     return f"""<!doctype html>
 <html>
@@ -919,36 +1194,170 @@ def write_html(
   <meta charset="utf-8"/>
   <title>Investo Valuation Report</title>
   <style>
-    body {{ font-family: Arial, sans-serif; margin: 16px; }}
-    h1, h2 {{ margin: 10px 0; }}
-    .meta {{ color:#666; margin-bottom: 12px; }}
-    table {{ border-collapse: collapse; width: 100%; font-size: 13px; }}
-    th, td {{ padding: 6px 8px; border-bottom: 1px solid #ddd; text-align: left; }}
-    th {{ background: #f5f5f5; }}
+    body {{
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f6f8fb;
+      color: #1f2937;
+      margin: 0;
+      padding: 24px;
+    }}
+    .wrap {{
+      max-width: 1900px;
+      margin: 0 auto;
+    }}
+    .card {{
+      background: #ffffff;
+      border: 1px solid #d8dee8;
+      border-radius: 14px;
+      padding: 18px 20px;
+      margin: 0 0 16px 0;
+    }}
+    .hero {{
+      background: #ffffff;
+      border: 1px solid #d8dee8;
+      border-radius: 16px;
+      padding: 22px 24px;
+      margin-bottom: 16px;
+    }}
+    h1 {{
+      margin: 0 0 6px 0;
+      font-size: 28px;
+    }}
+    h2 {{
+      margin: 0 0 10px 0;
+      font-size: 19px;
+    }}
+    .muted {{
+      color: #6b7280;
+      font-size: 13px;
+    }}
+    .chips {{
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }}
+    .chip {{
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 12px 16px;
+      min-width: 190px;
+    }}
+    .chip span {{
+      display: block;
+      font-size: 12px;
+      color: #6b7280;
+    }}
+    .chip b,
+    .chip b span {{
+      display: block;
+      font-size: 32px;
+      line-height: 1.1;
+      margin-top: 6px;
+      font-weight: 700;
+    }}
+    .chip .neg {{
+      color: #b91c1c;
+      font-weight: 700;
+    }}
+    .chip .pos-neutral {{
+      color: #1f2937;
+      font-weight: 700;
+    }}
+    .section {{
+      overflow: auto;
+    }}
+    table.report-table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 10px;
+    }}
+    .report-table th,
+    .report-table td {{
+      border-bottom: 1px solid #e5e7eb;
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+      white-space: nowrap;
+    }}
+    .report-table th {{
+      background: #f9fafb;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      font-weight: 700;
+    }}
+    .report-table tbody tr:nth-child(even) {{
+      background: #fcfcfd;
+    }}
+    .report-table tbody tr:hover {{
+      background: #f3f4f6;
+    }}
+    .pos {{
+      color: #15803d;
+      font-weight: 600;
+    }}
+    .neg {{
+      color: #b91c1c;
+      font-weight: 600;
+    }}
+    .neutral {{
+      color: #374151;
+      font-weight: 600;
+    }}
+    .footer {{
+      color: #6b7280;
+      font-size: 12px;
+      margin-top: 4px;
+    }}
   </style>
 </head>
 <body>
-  <h1>Investo Valuation Report</h1>
-  <div class="meta">As of: <b>{asof}</b> &nbsp; | &nbsp; Missing prices: <b>{missing_str}</b></div>
+  <div class="wrap">
 
-  <h2>Valuation summary</h2>
-  {_df_to_html(valuation.drop(columns=["Price_Missing"], errors="ignore"), pct_cols=["Unrealised %"])}
+    <div class="hero">
+      <h1>Investo Valuation Report</h1>
+      <div class="muted">Generated: {asof}</div>
 
-  {realised_summary_block}
+     <div class="chips">
+        <div class="chip"><span>Portfolio value</span><b>{_fmt_chip_money(priced_val_eur, "EUR")}</b></div>
+        <div class="chip"><span>Unrealised P/L</span><b>{_fmt_chip_money(unrealised_eur, "EUR")}</b></div>
+        <div class="chip"><span>Realised P/L</span><b>{_fmt_chip_money(total_realised, "EUR")}</b></div>
+        <div class="chip"><span>Unrealised P/L current year</span><b>{_fmt_chip_money(unrealised_ytd_total, "EUR")}</b></div>
+        <div class="chip"><span>Realised P/L current year</span><b>{_fmt_chip_money(realised_ytd_total, "EUR")}</b></div>
+        <div class="chip"><span>YTD plain return</span><b>{_fmt_pct(simple_return_total)}</b></div>
+      </div>
+    </div>
 
-  {realised_trades_block}
+    <div class="card section">
+      <h2>Valuation summary</h2>
+      <div class="muted">Open positions with latest market valuation and unrealised performance.</div>
+      {_table_html(valuation.drop(columns=["Price_Missing"], errors="ignore"))}
+    </div>
 
-  <h2>Realised P/L by year</h2>
-  {_df_to_html(realised_by_year, pct_cols=[])}
+    {realised_summary_block}
 
-  <h2>YTD performance (money-weighted)</h2>
-  {_df_to_html(ytd, pct_cols=["MWR % (YTD)", "MWR % (ann.)"])}
+    {realised_trades_block}
 
-  <div class="meta" style="margin-top:10px;">Generated by <b>portfolio_report.py</b></div>
+    <div class="card section">
+      <h2>Realised P/L by year</h2>
+      <div class="muted">Year-by-year sell-side realised outcome.</div>
+      {_table_html(realised_by_year)}
+    </div>
+
+    <div class="card section">
+      <h2>YTD performance</h2>
+      <div class="muted">Includes both plain return for readability and money-weighted return for timing-sensitive analysis.</div>
+      {_table_html(ytd)}
+    </div>
+
+    <div class="footer">Generated by <b>portfolio_report.py</b></div>
+  </div>
 </body>
 </html>
 """
-
 
 def send_email(subject: str, html_body: str, attachments: List[Path]) -> None:
     host = os.getenv("SMTP_HOST", "")
@@ -1065,7 +1474,7 @@ def main() -> int:
     )
 
     if SEND_VALUATION_EMAIL:
-        subject = f"Kathleen Investo -Live - Valuation Report – {_now_str()}"
+        subject = f"Investo -Live - Valuation Report – {_now_str()}"
         send_email(
             subject,
             html_email,
