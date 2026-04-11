@@ -682,15 +682,12 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
         name = g["Name"].iloc[-1]
         ccy = g["Currency"].dropna().iloc[-1] if g["Currency"].dropna().size else "EUR"
 
-        # Reconstruct opening position at 1 Jan and current ending units
-        # Reconstruct opening position at 1 Jan and current ending units
-        units_start = 0.0
-        units_end = 0.0
-        opening_cost_basis_eur = 0.0
-        opening_units_at_y0 = 0.0
-
+        # Reconstruct opening position at 1 Jan and ending position today
         running_units = 0.0
         running_cost_eur = 0.0
+
+        units_start = 0.0
+        opening_cost_basis_eur = 0.0
 
         for r in g.itertuples(index=False):
             qty = float(getattr(r, "Quantity", 0.0) or 0.0)
@@ -700,11 +697,40 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
             total_eur = float(getattr(r, "TotalCost_EUR", 0.0) or 0.0)
             charges = float(getattr(r, "Charges", 0.0) or 0.0)
 
+            if d is None:
+                continue
+
+            if d < y0:
+                if status.startswith("bought"):
+                    running_units += qty
+                    running_cost_eur += (total_eur + charges)
+                elif status.startswith("sold"):
+                    proceeds = float(total_eur - charges)
+                    if abs(running_units) > UNITS_EPS:
+                        avg_cost = running_cost_eur / running_units
+                        cost_sold = avg_cost * qty
+                        running_units -= qty
+                        running_cost_eur -= cost_sold
+                    else:
+                        running_units -= qty
+
+                units_start = running_units
+                opening_cost_basis_eur = running_cost_eur
+
+        # Rebuild full ending position independently
+        running_units = 0.0
+        running_cost_eur = 0.0
+
+        for r in g.itertuples(index=False):
+            qty = float(getattr(r, "Quantity", 0.0) or 0.0)
+            status = str(getattr(r, "Status", "")).lower()
+            total_eur = float(getattr(r, "TotalCost_EUR", 0.0) or 0.0)
+            charges = float(getattr(r, "Charges", 0.0) or 0.0)
+
             if status.startswith("bought"):
                 running_units += qty
                 running_cost_eur += (total_eur + charges)
             elif status.startswith("sold"):
-                proceeds = float(total_eur - charges)
                 if abs(running_units) > UNITS_EPS:
                     avg_cost = running_cost_eur / running_units
                     cost_sold = avg_cost * qty
@@ -712,11 +738,6 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
                     running_cost_eur -= cost_sold
                 else:
                     running_units -= qty
-
-            if d is not None and d < y0:
-                units_start = running_units
-                opening_units_at_y0 = running_units
-                opening_cost_basis_eur = running_cost_eur
 
         units_end = running_units
 
@@ -744,14 +765,11 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
             flows.append((y0, -float(start_value_eur)))
             portfolio_flows[y0] = portfolio_flows.get(y0, 0.0) - float(start_value_eur)
 
-        # YTD layer tracking
         realised_ytd_eur = 0.0
 
-        # Accounting layer for realised P/L
         accounting_open_units_remaining = float(units_start) if abs(units_start) > UNITS_EPS else 0.0
         accounting_open_cost_remaining = float(opening_cost_basis_eur) if math.isfinite(float(opening_cost_basis_eur)) else 0.0
 
-        # Performance layer for YTD unrealised
         perf_open_units_remaining = float(units_start) if abs(units_start) > UNITS_EPS else 0.0
         opening_start_value_eur = float(start_value_eur or 0.0)
         opening_value_per_unit_eur = (
@@ -798,7 +816,6 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
 
                 qty_to_match = float(qty)
 
-                # -------- accounting realised P/L --------
                 matched_accounting_cost_eur = 0.0
                 qty_left_accounting = qty_to_match
 
@@ -829,7 +846,6 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
 
                 realised_ytd_eur += (proceeds - matched_accounting_cost_eur)
 
-                # -------- performance layer consumption for unrealised YTD --------
                 qty_left_perf = qty_to_match
 
                 if qty_left_perf > UNITS_EPS and perf_open_units_remaining > UNITS_EPS:
@@ -910,7 +926,7 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
                 "Start value (EUR)": start_value_eur,
                 "Buys (EUR)": buys_eur,
                 "Sells (EUR)": sells_eur,
-                "Current value (EUR)": end_value_eur,
+                "End value (EUR)": end_value_eur,
                 "Realised YTD (EUR)": realised_ytd_eur,
                 "Unrealised YTD (EUR)": unrealised_ytd_eur,
                 "Total return YTD (EUR)": total_return_eur,
@@ -974,7 +990,6 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
         ytd_df = pd.concat([body, ytd_df.iloc[[-1]]], ignore_index=True)
 
     return ytd_df, port_xirr
-
 
 def _fmt(x, decimals=2) -> str:
     try:
