@@ -671,8 +671,8 @@ def _xirr(cashflows: List[Tuple[date, float]]) -> Optional[float]:
 
 ###############################################
 def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_year: int) -> Tuple[pd.DataFrame, Optional[float]]:
-    y0 = date(report_year, 1, 1)
-    asof = datetime.now().date()
+    y0 = pd.Timestamp(report_year, 1, 1)
+    asof = pd.Timestamp(datetime.now().date())
 
     rows: List[dict] = []
     portfolio_flows: Dict[date, float] = {}
@@ -685,8 +685,8 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
         # -----------------------------
         # Opening snapshot: position strictly before 1 Jan
         # -----------------------------
-        opening_tx = g[g["Date"].dt.date < y0].copy()
-
+        opening_tx = g[g["Date"] < y0].copy()
+      
         opening_units = 0.0
         opening_cost_eur = 0.0
 
@@ -767,8 +767,8 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
         flows: List[Tuple[date, float]] = []
 
         if start_value_eur is not None and math.isfinite(float(start_value_eur)) and float(start_value_eur) != 0.0:
-            flows.append((y0, -float(start_value_eur)))
-            portfolio_flows[y0] = portfolio_flows.get(y0, 0.0) - float(start_value_eur)
+            flows.append((y0.date(), -float(start_value_eur)))
+            portfolio_flows[y0.date()] = portfolio_flows.get(y0.date(), 0.0) - float(start_value_eur)
 
         realised_ytd_eur = 0.0
 
@@ -786,7 +786,7 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
         current_year_buy_lots_accounting: list[dict[str, float]] = []
         current_year_buy_lots_perf: list[dict[str, float]] = []
 
-        current_year_tx = g[(g["Date"].dt.date >= y0) & (g["Date"].dt.date <= asof)].copy()
+        current_year_tx = g[(g["Date"] >= y0) & (g["Date"] <= asof)].copy()
 
         for r in current_year_tx.itertuples(index=False):
             status = str(getattr(r, "Status", "")).lower()
@@ -805,8 +805,8 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
             if status.startswith("bought"):
                 cash = float(total_eur + charges)
                 buys_eur += cash
-                flows.append((d, -cash))
-                portfolio_flows[d] = portfolio_flows.get(d, 0.0) - cash
+                flows.append((pd.Timestamp(d).date(), -cash))
+                portfolio_flows[pd.Timestamp(d).date()] = portfolio_flows.get(pd.Timestamp(d).date(), 0.0) - cash
 
                 current_year_buy_lots_accounting.append({"units": float(qty), "cost_eur": float(cash)})
                 current_year_buy_lots_perf.append({"units": float(qty), "cost_eur": float(cash)})
@@ -814,8 +814,8 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
             elif status.startswith("sold"):
                 proceeds = float(total_eur - charges)
                 sells_eur += proceeds
-                flows.append((d, proceeds))
-                portfolio_flows[d] = portfolio_flows.get(d, 0.0) + proceeds
+                flows.append((asof.date(), float(end_value_eur)))
+                portfolio_flows[asof.date()] = portfolio_flows.get(asof.date(), 0.0) + float(end_value_eur)
 
                 qty_to_match = float(qty)
 
