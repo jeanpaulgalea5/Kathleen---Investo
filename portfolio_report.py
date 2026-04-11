@@ -14,13 +14,6 @@ Reads "Investments.xlsx" (Transactions sheet) and produces:
 
 Emailing (optional):
   set SEND_VALUATION_EMAIL=true and SMTP/EMAIL env vars.
-
-Notes
-- Uses weighted-average cost basis to compute realised P/L per sell.
-- YTD MWR uses XIRR on cashflows within the year, plus a start-of-year value
-  (if units were held at 1 Jan) and an end-of-report value.
-- If a Yahoo price is missing, valuation/MWR becomes N/A for that instrument,
-  but the script does not crash.
 """
 
 from __future__ import annotations
@@ -59,6 +52,7 @@ XAU_PROXY_CCY = os.getenv("XAU_PROXY_CCY", "USD")
 XAG_PROXY_TICKER = os.getenv("XAG_PROXY_TICKER", "SI=F")
 XAG_PROXY_CCY = os.getenv("XAG_PROXY_CCY", "USD")
 
+
 def _now_str() -> str:
     return datetime.now().strftime("%d/%m/%Y %H:%M")
 
@@ -74,14 +68,24 @@ def _norm_currency(v) -> str:
     return s or "EUR"
 
 
+def _is_buy_status(status: str) -> bool:
+    s = (status or "").strip().lower()
+    return "buy" in s
+
+
+def _is_sell_status(status: str) -> bool:
+    s = (status or "").strip().lower()
+    return "sell" in s
+
+
 def _price_feed(code: str, holding_ccy: str) -> tuple[str, str]:
     """
     Returns (yahoo_ticker_to_fetch, price_currency).
 
     Rules:
       - XAU -> fetch XAU proxy in USD and FX-convert.
-      - Moneybase/EODHD-style LSE codes like 'ITRKL.XC' / 'BARCL.XC'
-        map to Yahoo LSE ticker '<BASE>.L'
+      - XAG -> fetch XAG proxy in USD and FX-convert.
+      - Moneybase/EODHD-style LSE codes like 'ITRKL.XC' map to Yahoo '<BASE>.L'
     """
     code_u = (code or "").strip().upper()
 
@@ -290,7 +294,7 @@ def load_transactions(xlsx: Path) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Transactions sheet is missing columns: {sorted(missing)}")
 
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True)
     df["Name"] = df["Name"].fillna("").astype(str).str.strip()
     df["Code"] = df["Code"].fillna("").astype(str).str.strip()
     df["Platform"] = df["Platform"].fillna("").astype(str).str.strip()
@@ -301,7 +305,7 @@ def load_transactions(xlsx: Path) -> pd.DataFrame:
     df["TotalCost_EUR"] = pd.to_numeric(df["TotalCost_EUR"], errors="coerce").fillna(0.0)
     df["Charges"] = pd.to_numeric(df["Charges"], errors="coerce").fillna(0.0)
 
-    for col in ["Price_Per_Share_FC", "Price_Per_Share_EUR", "TotalCost_FC"]:
+    for col in ["Price_Per_Share_FC", "Price_Per_Share_EUR", "TotalCost_FC", "FX_Rate_Used"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
@@ -337,11 +341,11 @@ def compute_positions_and_realised(tx: pd.DataFrame) -> Tuple[pd.DataFrame, pd.D
             total_eur = float(getattr(r, "TotalCost_EUR", 0.0) or 0.0)
             charges = float(getattr(r, "Charges", 0.0) or 0.0)
 
-            if status.startswith("bought"):
+            if _is_buy_status(status):
                 st.units += qty
                 st.cost_eur += total_eur + charges
 
-            elif status.startswith("sold"):
+            elif _is_sell_status(status):
                 proceeds_eur = total_eur - charges
                 avg_cost = (st.cost_eur / st.units) if st.units > 0 else 0.0
                 cost_sold = avg_cost * qty
@@ -461,9 +465,9 @@ def build_realised_trades_summary(tx: pd.DataFrame, realised_trades: pd.DataFram
         return pd.DataFrame(columns=cols)
 
     t = tx.copy()
-    t["Date"] = pd.to_datetime(t["Date"], errors="coerce")
+    t["Date"] = pd.to_datetime(t["Date"], errors="coerce", dayfirst=True)
     t["Status"] = t["Status"].fillna("").astype(str).str.lower()
-    buys = t[t["Status"].str.startswith("bought")].copy()
+    buys = t[t["Status"].astype(str).map(_is_buy_status)].copy()
     first_buy = (
         buys.groupby(["Code", "Platform"], dropna=False)["Date"]
         .min()
@@ -670,7 +674,6 @@ def _xirr(cashflows: List[Tuple[date, float]]) -> Optional[float]:
     return (lo + hi) / 2.0
 
 
-# Reconstruct opening position at 1 Jan and current ending units
 def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_year: int) -> Tuple[pd.DataFrame, Optional[float]]:
     y0 = date(report_year, 1, 1)
     asof = datetime.now().date()
@@ -704,11 +707,10 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
             total_eur = float(getattr(r, "TotalCost_EUR", 0.0) or 0.0)
             charges = float(getattr(r, "Charges", 0.0) or 0.0)
 
-            if status.startswith("bought"):
+            if _is_buy_status(status):
                 running_units += qty
                 running_cost_eur += total_eur + charges
-
-            elif status.startswith("sold"):
+            elif _is_sell_status(status):
                 if abs(running_units) > UNITS_EPS:
                     avg_cost = running_cost_eur / running_units
                     cost_sold = avg_cost * qty
@@ -742,14 +744,14 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
             total_eur = float(getattr(r, "TotalCost_EUR", 0.0) or 0.0)
             charges = float(getattr(r, "Charges", 0.0) or 0.0)
 
-            if status.startswith("bought"):
+            if _is_buy_status(status):
                 cash = total_eur + charges
                 buys_eur += cash
 
                 accounting_units += qty
                 accounting_cost_eur += cash
 
-            elif status.startswith("sold"):
+            elif _is_sell_status(status):
                 proceeds = total_eur - charges
                 sells_eur += proceeds
 
@@ -803,12 +805,12 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
             total_eur = float(getattr(r, "TotalCost_EUR", 0.0) or 0.0)
             charges = float(getattr(r, "Charges", 0.0) or 0.0)
 
-            if status.startswith("bought"):
+            if _is_buy_status(status):
                 cash = total_eur + charges
                 flows.append((d, -cash))
                 portfolio_flows[d] = portfolio_flows.get(d, 0.0) - cash
 
-            elif status.startswith("sold"):
+            elif _is_sell_status(status):
                 proceeds = total_eur - charges
                 flows.append((d, proceeds))
                 portfolio_flows[d] = portfolio_flows.get(d, 0.0) + proceeds
@@ -908,6 +910,7 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
 
     return ytd_df, port_xirr
 
+
 def _fmt(x, decimals=2) -> str:
     try:
         if x is None:
@@ -937,20 +940,6 @@ def _fmt_pct(x) -> str:
         return "—"
 
 
-def _df_to_html(df: pd.DataFrame, pct_cols: Iterable[str] = ()) -> str:
-    if df.empty:
-        return "<p>N/A</p>"
-
-    out = df.copy()
-    for c in out.columns:
-        if c in pct_cols:
-            out[c] = out[c].map(_fmt_pct)
-        else:
-            out[c] = out[c].map(lambda v: _fmt(v, 2) if isinstance(v, (int, float)) else (v if v else ""))
-
-    return out.to_html(index=False, border=0, justify="left")
-
-
 def write_html(
     valuation: pd.DataFrame,
     realised_summary: pd.DataFrame,
@@ -959,12 +948,6 @@ def write_html(
     ytd: pd.DataFrame,
     include_realised_trades_detail: bool = True,
 ) -> str:
-    miss = []
-    if not valuation.empty and "Price_Missing" in valuation.columns:
-        m = valuation[valuation["Price_Missing"] == True]  # noqa: E712
-        miss = m["Code"].dropna().astype(str).tolist()
-    missing_str = ", ".join(miss) if miss else "None"
-
     asof = _now_str()
 
     priced_val_eur = None
@@ -1060,7 +1043,7 @@ def write_html(
 
         return str(sval)
 
-    def _table_html(df: pd.DataFrame, pct_cols: Iterable[str] = ()) -> str:
+    def _table_html(df: pd.DataFrame) -> str:
         if df.empty:
             return "<div class='muted'>N/A</div>"
 
@@ -1253,7 +1236,7 @@ def write_html(
       <h1>Investo Valuation Report</h1>
       <div class="muted">Generated: {asof}</div>
 
-     <div class="chips">
+      <div class="chips">
         <div class="chip"><span>Portfolio value</span><b>{_fmt_chip_money(priced_val_eur, "EUR")}</b></div>
         <div class="chip"><span>Unrealised P/L</span><b>{_fmt_chip_money(unrealised_eur, "EUR")}</b></div>
         <div class="chip"><span>Realised P/L</span><b>{_fmt_chip_money(total_realised, "EUR")}</b></div>
@@ -1290,6 +1273,7 @@ def write_html(
 </body>
 </html>
 """
+
 
 def send_email(subject: str, html_body: str, attachments: List[Path]) -> None:
     host = os.getenv("SMTP_HOST", "")
