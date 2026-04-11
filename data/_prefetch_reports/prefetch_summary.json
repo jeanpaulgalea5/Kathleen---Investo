@@ -2,7 +2,7 @@
   "watchlist_count": 73,
   "success_count": 71,
   "failure_count": 2,
-  "stale_count": 18,
+  "stale_count": 0,
   "failed_tickers": [
     {
       "ticker": "XAG",
@@ -14,5 +14,5 @@
     }
   ],
   "start": "2010-01-01",
-  "end": "2026-04-11"
+  "end": "2026-04-12"
 }
