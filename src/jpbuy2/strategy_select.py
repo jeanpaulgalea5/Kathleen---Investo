@@ -80,30 +80,42 @@ _BUF_KWARGS = dict(
 STRATEGY_PROFILES: dict[str, Settings] = {
     # --- Original profiles (unchanged) ---
     "S0_BASE":        Settings(),
-    "S1_FAST":        replace(_BASE, golden_min_weeks_on=4,  golden_trailing_atr_mult=1.0),
+    "S1_FAST":        replace(_BASE, golden_min_weeks_on=4,  golden_trailing_atr_mult=1.0,
+                               golden_ma_break_buffer=0.015,  # ← PHASE 1 ADDED
+                               golden_hard_stop_from_entry_pct=0.06),  # ← PHASE 1 ADDED
     "S2_HOLD12":      replace(_BASE, golden_min_weeks_on=12, golden_trailing_atr_mult=1.4),
     "S3_HOLD16":      replace(_BASE, golden_min_weeks_on=16, golden_trailing_atr_mult=1.4),
     "S4_WIDEATR":     replace(_BASE, golden_min_weeks_on=8,  golden_trailing_atr_mult=2.2),
     "S5_COMBO":       replace(_BASE, golden_min_weeks_on=12, golden_trailing_atr_mult=2.0,
                                golden_ma_break_confirm_weeks=2),
     "S6_TIGHT":       replace(_BASE, golden_min_weeks_on=6,  golden_trailing_atr_mult=1.0,
-                               golden_hard_stop_from_entry_pct=0.07),
+                               golden_hard_stop_from_entry_pct=0.08,  # ← PHASE 1 CHANGED (was 0.07)
+                               golden_ma_break_buffer=0.02),  # ← PHASE 1 ADDED
     # --- BUF variants — hold strategies with wider RSI gate + higher exit threshold ---
     # Adaptive selector picks these automatically when they outperform the plain version.
     # INTU and MAP.MC tested and stay on their plain variants (S3_HOLD16 / S5_COMBO).
     "S2_HOLD12_BUF":  replace(_BASE, golden_min_weeks_on=12, golden_trailing_atr_mult=1.4,
+                               golden_ma_break_buffer=0.02,  # ← PHASE 1 ADDED
                                **_BUF_KWARGS),
     "S3_HOLD16_BUF":  replace(_BASE, golden_min_weeks_on=16, golden_trailing_atr_mult=1.4,
                                **_BUF_KWARGS),
     "S5_COMBO_BUF":   replace(_BASE, golden_min_weeks_on=12, golden_trailing_atr_mult=2.0,
-                               golden_ma_break_confirm_weeks=2, **_BUF_KWARGS),
+                               golden_ma_break_confirm_weeks=2,
+                               golden_ma_break_buffer=0.03,  # ← PHASE 1 ADDED
+                               golden_hard_stop_from_entry_pct=0.065,  # ← PHASE 1 ADDED
+                               **_BUF_KWARGS),
     # --- DI Guard: blocks entry when -DI >= +DI (bearish directional trend) ---
     # Targets tickers in confirmed downtrends. Validated: blocks 92% of losing
     # entries on AMP.MI, TEP.PA, HYQ.DE, NEXI.MI, NOV.DE, DSY.PA.
     "S8_DI_GUARD":     replace(_BASE, golden_min_weeks_on=4, golden_trailing_atr_mult=1.0,
-                                silver_require_bullish_di=True),
+                                silver_require_bullish_di=True,
+                                golden_ma_break_buffer=0.02,  # ← PHASE 1 ADDED
+                                golden_hard_stop_from_entry_pct=0.06),  # ← PHASE 1 ADDED
     "S8_DI_GUARD_BUF": replace(_BASE, golden_min_weeks_on=4, golden_trailing_atr_mult=1.0,
-                                silver_require_bullish_di=True, **_BUF_KWARGS),
+                                silver_require_bullish_di=True,
+                                golden_ma_break_buffer=0.025,  # ← PHASE 1 ADDED
+                                golden_hard_stop_from_entry_pct=0.06,  # ← PHASE 1 ADDED
+                                **_BUF_KWARGS),
     # --- Specialised profiles ---
     # S11: noisy volatile stocks — exit faster than S1_FAST, tight dist filter
     "S11_VOLATILE_FAST": replace(_BASE, golden_min_weeks_on=3, golden_trailing_atr_mult=0.9,
@@ -120,30 +132,52 @@ STRATEGY_PROFILES: dict[str, Settings] = {
     ),
     # S12: low-momentum recovery — wait for ADX confirmation, wider trail
     "S12_RECOVERY":    replace(_BASE, golden_min_weeks_on=6, golden_trailing_atr_mult=1.6,
-                                golden_rsi_entry_buffer=25.0, silver_adx_entry_min=18.0),
+                                golden_rsi_entry_buffer=25.0, silver_adx_entry_min=18.0,
+                                golden_ma_break_buffer=0.02,  # ← PHASE 1 ADDED
+                                golden_hard_stop_from_entry_pct=0.07),  # ← PHASE 1 ADDED
+   # S13_QUALITY_HOLD: patient profile for quality dividend/steady compounders
+   # No MA break buffer (let trends develop), wide trail, RSI protection
+   "S13_QUALITY_HOLD": replace(_BASE,
+       golden_min_weeks_on=14,              # Patient hold
+       golden_trailing_atr_mult=1.7,        # Wide trail to let it run
+       golden_hard_stop_from_entry_pct=0.065,  # Moderate downside protection
+       golden_rsi_entry_buffer=30.0,        # RSI filter
+       golden_rsi_high_quantile=0.92,       # High RSI exit threshold
+       silver_max_dist_from_ma=0.08,        # Wider entry tolerance
+    ),
 }
 
 STRATEGY_PARAMS: dict[str, dict] = {
     "S0_BASE":        {},
-    "S1_FAST":        {"golden_min_weeks_on": 4,  "golden_trailing_atr_mult": 1.0},
+    "S1_FAST":        {"golden_min_weeks_on": 4,  "golden_trailing_atr_mult": 1.0,
+                        "golden_ma_break_buffer": 0.015,  # ← PHASE 1 ADDED
+                        "golden_hard_stop_from_entry_pct": 0.06},  # ← PHASE 1 ADDED
     "S2_HOLD12":      {"golden_min_weeks_on": 12},
     "S3_HOLD16":      {"golden_min_weeks_on": 16},
     "S4_WIDEATR":     {"golden_trailing_atr_mult": 2.2},
     "S5_COMBO":       {"golden_min_weeks_on": 12, "golden_trailing_atr_mult": 2.0,
                         "golden_ma_break_confirm_weeks": 2},
     "S6_TIGHT":       {"golden_min_weeks_on": 6,  "golden_trailing_atr_mult": 1.0,
-                        "golden_hard_stop_from_entry_pct": 0.07},
+                        "golden_hard_stop_from_entry_pct": 0.08,  # ← PHASE 1 CHANGED (was 0.07)
+                        "golden_ma_break_buffer": 0.02},  # ← PHASE 1 ADDED
     "S2_HOLD12_BUF":  {"golden_min_weeks_on": 12, "golden_trailing_atr_mult": 1.4,
+                        "golden_ma_break_buffer": 0.02,  # ← PHASE 1 ADDED
                         "golden_rsi_entry_buffer": 30.0, "golden_rsi_high_quantile": 0.92},
     "S3_HOLD16_BUF":  {"golden_min_weeks_on": 16, "golden_trailing_atr_mult": 1.4,
                         "golden_rsi_entry_buffer": 30.0, "golden_rsi_high_quantile": 0.92},
     "S5_COMBO_BUF":   {"golden_min_weeks_on": 12, "golden_trailing_atr_mult": 2.0,
                         "golden_ma_break_confirm_weeks": 2,
+                        "golden_ma_break_buffer": 0.03,  # ← PHASE 1 ADDED
+                        "golden_hard_stop_from_entry_pct": 0.065,  # ← PHASE 1 ADDED
                         "golden_rsi_entry_buffer": 30.0, "golden_rsi_high_quantile": 0.92},
     "S8_DI_GUARD":     {"golden_min_weeks_on": 4,  "golden_trailing_atr_mult": 1.0,
-                         "silver_require_bullish_di": True},
+                         "silver_require_bullish_di": True,
+                         "golden_ma_break_buffer": 0.02,  # ← PHASE 1 ADDED
+                         "golden_hard_stop_from_entry_pct": 0.06},  # ← PHASE 1 ADDED
     "S8_DI_GUARD_BUF": {"golden_min_weeks_on": 4,  "golden_trailing_atr_mult": 1.0,
                          "silver_require_bullish_di": True,
+                         "golden_ma_break_buffer": 0.025,  # ← PHASE 1 ADDED
+                         "golden_hard_stop_from_entry_pct": 0.06,  # ← PHASE 1 ADDED
                          "golden_rsi_entry_buffer": 30.0, "golden_rsi_high_quantile": 0.92},
     "S11_VOLATILE_FAST": {"golden_min_weeks_on": 3, "golden_trailing_atr_mult": 0.9,
                            "golden_hard_stop_from_entry_pct": 0.06,
@@ -156,7 +190,17 @@ STRATEGY_PARAMS: dict[str, dict] = {
          "golden_trend_break_macd_neg_weeks": 1,},
    
     "S12_RECOVERY":    {"golden_min_weeks_on": 6, "golden_trailing_atr_mult": 1.6,
-                         "golden_rsi_entry_buffer": 25.0, "silver_adx_entry_min": 18.0},
+                         "golden_rsi_entry_buffer": 25.0, "silver_adx_entry_min": 18.0,
+                         "golden_ma_break_buffer": 0.02,  # ← PHASE 1 ADDED
+                         "golden_hard_stop_from_entry_pct": 0.07},  # ← PHASE 1 ADDED
+    "S13_QUALITY_HOLD": {
+         "golden_min_weeks_on": 14,
+         "golden_trailing_atr_mult": 1.7,
+         "golden_hard_stop_from_entry_pct": 0.065,
+         "golden_rsi_entry_buffer": 30.0,
+         "golden_rsi_high_quantile": 0.92,
+         "silver_max_dist_from_ma": 0.08,
+     },
 }
 
 
