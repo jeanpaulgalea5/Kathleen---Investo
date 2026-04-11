@@ -670,19 +670,7 @@ def _xirr(cashflows: List[Tuple[date, float]]) -> Optional[float]:
     return (lo + hi) / 2.0
 
 
-def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_year: int) -> Tuple[pd.DataFrame, Optional[float]]:
-    y0 = date(report_year, 1, 1)
-    asof = datetime.now().date()
-
-    rows: List[dict] = []
-    portfolio_flows: Dict[date, float] = {}
-
-    for (code, platform), g in tx.groupby(["Code", "Platform"], dropna=False):
-        g = g.sort_values(["Date"]).reset_index(drop=True)
-        name = g["Name"].iloc[-1]
-        ccy = g["Currency"].dropna().iloc[-1] if g["Currency"].dropna().size else "EUR"
-
-        # Reconstruct opening position at 1 Jan and current ending units
+# Reconstruct opening position at 1 Jan and current ending units
 def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_year: int) -> Tuple[pd.DataFrame, Optional[float]]:
     y0 = date(report_year, 1, 1)
     asof = datetime.now().date()
@@ -787,7 +775,7 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
             start_fx = _fx_ccy_per_eur_on_or_after(price_ccy, y0)
             start_value_eur = None if start_px is None else _ccy_to_eur(opening_units * start_px, price_ccy, start_fx)
 
-        # End value now
+        # End value now = current price × shares held
         if abs(ending_units) <= UNITS_EPS:
             end_value_eur: Optional[float] = 0.0
         else:
@@ -919,62 +907,6 @@ def build_ytd_returns(tx: pd.DataFrame, realised_trades: pd.DataFrame, report_ye
         ytd_df = pd.concat([body, ytd_df.iloc[[-1]]], ignore_index=True)
 
     return ytd_df, port_xirr
-      
-    ytd_df = pd.DataFrame(rows)
-    if ytd_df.empty:
-        return ytd_df, None
-
-    ytd_key_cols = [
-        "Start value (EUR)",
-        "Buys (EUR)",
-        "Sells (EUR)",
-        "End value (EUR)",
-        "Realised YTD (EUR)",
-        "Unrealised YTD (EUR)",
-        "Total return YTD (EUR)",
-    ]
-    try:
-        key = ytd_df[ytd_key_cols].apply(pd.to_numeric, errors="coerce").fillna(0.0)
-        keep = key.abs().sum(axis=1) > 1e-9
-        ytd_df = ytd_df.loc[keep].reset_index(drop=True)
-    except Exception:
-        pass
-
-    sum_cols = [
-        "Start value (EUR)",
-        "Buys (EUR)",
-        "Sells (EUR)",
-        "End value (EUR)",
-        "Realised YTD (EUR)",
-        "Unrealised YTD (EUR)",
-        "Total return YTD (EUR)",
-    ]
-
-    totals = {"Investment": "TOTAL (priced only)", "Code": "", "Platform": "", "Ccy": ""}
-    for c in sum_cols:
-        totals[c] = float(pd.to_numeric(ytd_df[c], errors="coerce").sum(min_count=1))
-
-    total_base = totals.get("Start value (EUR)", 0.0) + totals.get("Buys (EUR)", 0.0)
-    if total_base and total_base > 0:
-        totals["Simple Return %"] = (totals.get("Total return YTD (EUR)", 0.0) / total_base) * 100.0
-    else:
-        totals["Simple Return %"] = math.nan
-
-    port_flows = sorted([(d, a) for d, a in portfolio_flows.items() if a != 0.0], key=lambda x: x[0])
-    port_xirr = _xirr(port_flows)
-    totals["MWR % (YTD)"] = (((1.0 + port_xirr) ** ((asof - y0).days / 365.0) - 1.0) * 100.0) if port_xirr is not None else math.nan
-    totals["MWR % (ann.)"] = (port_xirr * 100.0) if port_xirr is not None else math.nan
-
-    ytd_df = pd.concat([ytd_df, pd.DataFrame([totals])], ignore_index=True)
-
-    if len(ytd_df) > 1:
-        body = ytd_df.iloc[:-1].copy()
-        body["__mwr_ytd"] = pd.to_numeric(body.get("MWR % (YTD)"), errors="coerce")
-        body = body.sort_values(["__mwr_ytd"], ascending=False, na_position="last").drop(columns=["__mwr_ytd"], errors="ignore")
-        ytd_df = pd.concat([body, ytd_df.iloc[[-1]]], ignore_index=True)
-
-    return ytd_df, port_xirr
-
 
 def _fmt(x, decimals=2) -> str:
     try:
