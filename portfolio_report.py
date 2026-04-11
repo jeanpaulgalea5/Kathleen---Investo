@@ -1320,6 +1320,12 @@ def main() -> int:
         raise FileNotFoundError(f"Missing portfolio file: {PORTFOLIO_XLSX}")
 
     tx = load_transactions(PORTFOLIO_XLSX)
+    print("TX ROWS:", len(tx))
+    print("TX STATUS UNIQUE:", sorted(tx["Status"].dropna().astype(str).str.strip().unique().tolist()))
+    print("TX DATE MIN:", tx["Date"].min())
+    print("TX DATE MAX:", tx["Date"].max())
+    print("TX SAMPLE:")
+    print(tx[["Date", "Name", "Code", "Platform", "Quantity", "TotalCost_EUR", "Charges", "Currency", "Status"]].head(20).to_string())
 
     open_df, realised_trades, realised_by_year = compute_positions_and_realised(tx)
     valuation = enrich_valuation(open_df)
