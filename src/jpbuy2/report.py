@@ -111,6 +111,7 @@ def build_windows_report_for_ticker(
     ticker: str,
     golden_flags: pd.DataFrame,
     trades_df: pd.DataFrame,
+    strategy_name: str = "",
 ) -> pd.DataFrame:
     """
     One row per Golden window. If a Silver trade entry falls inside the window,
@@ -158,6 +159,7 @@ def build_windows_report_for_ticker(
             "Exit Price": "",
             "Return %": "",
             "Exit Reason": "",
+            "Strategy": strategy_name,
         }
 
         if matched is not None:
@@ -202,6 +204,7 @@ def write_combined_trade_report(
         asset_type: AssetType = r["type"]  # type: ignore
 
         s = settings_for_ticker(ticker, asset_type)
+        strategy_name = "DEFAULT"
 
         # Weekly + Golden flags
         df_w = fetch_ohlcv(ticker, start=start, end=end, interval="1wk", data_dir=data_dir)
@@ -214,12 +217,16 @@ def write_combined_trade_report(
         # new data has arrived. Falls back to settings_for_ticker if data too short.
         if asset_type == "stock" and len(df_d) >= 260:
             try:
-                s = settings_adaptive(
-                    ticker=ticker, df_d=df_d, df_w=df_w,
-                    data_dir=data_dir, verbose=True,
+                from .strategy_select import select_strategy
+                strategy_name, s, _ = select_strategy(
+                    ticker=ticker,
+                    df_d=df_d,
+                    df_w=df_w,
+                    data_dir=data_dir,
+                    force=False,
                 )
             except Exception:
-                pass  # keep settings_for_ticker as fallback
+                pass
 
         golden_flags = compute_golden_weekly_flags(df_w, s)
 
@@ -252,7 +259,12 @@ def write_combined_trade_report(
                 raise
     
         trades_df = _trades_to_df(ticker, trades)
-        windows_df = build_windows_report_for_ticker(ticker, golden_flags, trades_df)
+        windows_df = build_windows_report_for_ticker(
+            ticker,
+            golden_flags,
+            trades_df,
+            strategy_name=strategy_name,
+        )
 
         if not windows_df.empty:
             all_windows.append(windows_df)
@@ -275,6 +287,7 @@ def write_combined_trade_report(
             {
                 "Ticker": ticker,
                 "Type": asset_type,
+                "Strategy": strategy_name,
                 "Trades": trades_n,
                 "Win Rate %": win_rate,
                 "Avg Return %": avg_ret,
