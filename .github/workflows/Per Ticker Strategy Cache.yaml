@@ -1,5 +1,4 @@
 name: Do this when you update the watchlist /Warm Strategy Cache (run once)
-# Do this Manually when new tickers are added. To be sure delete the file data/strategy_cache where the strategy per ticker is stored
 
 on:
   workflow_dispatch:
@@ -53,6 +52,19 @@ jobs:
             --pause-seconds 0.40 \
             --max-failures 12
 
+      - name: Clear existing strategy cache
+        run: |
+          echo "Clearing existing strategy cache files..."
+          find data/strategy_cache -type f -name "*.json" -delete
+          echo "Cache directory after delete:"
+          ls -la data/strategy_cache || true
+
+      - name: Stage cache deletions
+        run: |
+          git add -A data/strategy_cache
+          echo "Git status after delete:"
+          git status --short data/strategy_cache || true
+
       - name: Warm strategy cache (all watchlist tickers)
         run: |
           python scripts/warm_strategy_cache.py \
@@ -63,23 +75,27 @@ jobs:
       - name: Show cache results
         run: |
           echo "=== strategy_cache files ==="
-          ls -la data/strategy_cache/
+          ls -la data/strategy_cache/ || true
           echo "=== sample (MSFT) ==="
           cat data/strategy_cache/MSFT.json || true
+
+      - name: Stage rebuilt cache
+        run: |
+          git add -A data/strategy_cache
+          echo "Git status after rebuild:"
+          git status --short data/strategy_cache || true
 
       - name: Commit cache to repo
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add data/strategy_cache/
-
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
 
-          git commit -m "Warm strategy cache — initial run [skip ci]"
+          git commit -m "Rebuild strategy cache from scratch [skip ci]"
           git pull --rebase --autostash origin main
           git push origin main
 
