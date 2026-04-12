@@ -292,7 +292,7 @@ def load_transactions(xlsx: Path) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Transactions sheet is missing columns: {sorted(missing)}")
 
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True)
     df["Name"] = df["Name"].fillna("").astype(str).str.strip()
     df["Code"] = df["Code"].fillna("").astype(str).str.strip()
     df["Platform"] = df["Platform"].fillna("").astype(str).str.strip()
