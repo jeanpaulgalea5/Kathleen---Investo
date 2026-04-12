@@ -1020,7 +1020,12 @@ def _fmt_pct(x) -> str:
         v = float(x)
         if abs(v) < 0.005:
             v = 0.0
-        return f"{v:,.2f}%"
+        
+        # Format negative percentages with parentheses
+        if v < 0:
+            return f"({abs(v):,.2f}%)"
+        else:
+            return f"{v:,.2f}%"
     except Exception:
         return "—"
 
@@ -1106,7 +1111,33 @@ def write_html(
             try:
                 dt = pd.to_datetime(val, errors="coerce")
                 if pd.notna(dt):
-                    return dt.strftime("%Y-%m-%d")
+                    return dt.strftime("%d/%m/%y")
+            except Exception:
+                pass
+        
+        # Handle Year column - show as YYYY only
+        if col == "Year":
+            try:
+                if isinstance(val, str) and val.upper() == "TOTAL":
+                    return val
+                # Try to extract year from various formats
+                year_val = None
+                if isinstance(val, (int, float)) and not math.isnan(float(val)):
+                    year_val = int(float(val))
+                elif isinstance(val, str):
+                    # Try to parse as date first
+                    dt = pd.to_datetime(val, errors="coerce")
+                    if pd.notna(dt):
+                        year_val = dt.year
+                    else:
+                        # Try to parse as integer
+                        try:
+                            year_val = int(float(val))
+                        except:
+                            pass
+                
+                if year_val and 1900 <= year_val <= 2100:
+                    return str(year_val)
             except Exception:
                 pass
 
@@ -1144,6 +1175,8 @@ def write_html(
                 if num > 0:
                     return f"<span class='pos'>{sval}</span>"
                 if num < 0:
+                    # For percentages, sval already has parentheses from _fmt_pct
+                    # Just apply red styling
                     return f"<span class='neg'>{sval}</span>"
 
         return str(sval)
@@ -1172,8 +1205,10 @@ def write_html(
 
     realised_summary_block = f"""
     <div class="card section">
-      <h2>Realised trades summary</h2>
-      <div class="muted">Grouped realised trade outcome by position and year.</div>
+      <div class="section-header">
+        <h2>💰 Realised Trades Summary</h2>
+        <div class="muted">Grouped realised trade outcomes by position and year</div>
+      </div>
       {_table_html(realised_summary)}
     </div>
     """
@@ -1181,8 +1216,10 @@ def write_html(
     realised_trades_block = (
         f"""
         <div class="card section">
-          <h2>Realised trade ledger</h2>
-          <div class="muted">Detailed sell-side realised trade history.</div>
+          <div class="section-header">
+            <h2>📝 Trade Ledger</h2>
+            <div class="muted">Detailed sell-side realised trade history</div>
+          </div>
           {_table_html(realised_trades)}
         </div>
         """
@@ -1212,148 +1249,380 @@ def write_html(
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>Investo Valuation Report</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Investo — Portfolio Valuation Report</title>
   <style>
-    body {{
-      font-family: Arial, Helvetica, sans-serif;
-      background: #f6f8fb;
-      color: #1f2937;
+    * {{
       margin: 0;
-      padding: 24px;
+      padding: 0;
+      box-sizing: border-box;
     }}
+    
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'SF Pro Display', system-ui, sans-serif;
+      background: #f8f9fa;
+      color: #111827;
+      margin: 0;
+      padding: 32px 20px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }}
+    
     .wrap {{
-      max-width: 1900px;
+      max-width: 1400px;
       margin: 0 auto;
     }}
+    
     .card {{
       background: #ffffff;
-      border: 1px solid #d8dee8;
-      border-radius: 14px;
-      padding: 18px 20px;
-      margin: 0 0 16px 0;
+      border-radius: 12px;
+      padding: 28px 32px;
+      margin: 0 0 20px 0;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e5e7eb;
     }}
+    
     .hero {{
       background: #ffffff;
-      border: 1px solid #d8dee8;
-      border-radius: 16px;
-      padding: 22px 24px;
-      margin-bottom: 16px;
+      border-radius: 12px;
+      padding: 32px 36px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e5e7eb;
     }}
+    
+    .hero-header {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }}
+    
+    .hero-title {{
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }}
+    
+    .logo {{
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 700;
+      color: white;
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    }}
+    
     h1 {{
-      margin: 0 0 6px 0;
+      margin: 0;
       font-size: 28px;
+      font-weight: 700;
+      color: #111827;
+      letter-spacing: -0.3px;
     }}
+    
     h2 {{
-      margin: 0 0 10px 0;
-      font-size: 19px;
+      margin: 0 0 8px 0;
+      font-size: 18px;
+      font-weight: 700;
+      color: #111827;
+      letter-spacing: -0.2px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }}
+    
+    h2::before {{
+      content: '';
+      width: 3px;
+      height: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 2px;
+    }}
+    
     .muted {{
       color: #6b7280;
       font-size: 13px;
+      font-weight: 500;
     }}
-    .chips {{
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-top: 14px;
-    }}
-    .chip {{
+    
+    .timestamp {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
       background: #f3f4f6;
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      padding: 12px 16px;
-      min-width: 190px;
-    }}
-    .chip span {{
-      display: block;
+      border-radius: 6px;
       font-size: 12px;
       color: #6b7280;
+      font-weight: 500;
     }}
+    
+    .timestamp::before {{
+      content: '🕐';
+      font-size: 14px;
+    }}
+    
+    .chips {{
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 0;
+    }}
+    
+    .chip {{
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 10px 16px;
+      min-width: 140px;
+    }}
+    
+    .chip span {{
+      display: block;
+      font-size: 10px;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }}
+    
     .chip b,
     .chip b span {{
       display: block;
-      font-size: 32px;
-      line-height: 1.1;
-      margin-top: 6px;
+      font-size: 26px;
+      line-height: 1.2;
       font-weight: 700;
+      color: #111827;
     }}
+    
     .chip .neg {{
-      color: #b91c1c;
+      color: #dc2626;
       font-weight: 700;
     }}
+    
     .chip .pos-neutral {{
-      color: #1f2937;
+      color: #059669;
       font-weight: 700;
     }}
+    
     .section {{
-      overflow: auto;
+      overflow-x: auto;
     }}
+    
+    .section-header {{
+      margin-bottom: 16px;
+    }}
+    
     table.report-table {{
       width: 100%;
-      border-collapse: collapse;
+      border-collapse: separate;
+      border-spacing: 0;
       font-size: 13px;
-      margin-top: 10px;
+      margin-top: 12px;
     }}
-    .report-table th,
-    .report-table td {{
-      border-bottom: 1px solid #e5e7eb;
-      padding: 8px 10px;
-      text-align: left;
-      vertical-align: top;
-      white-space: nowrap;
-    }}
-    .report-table th {{
+    
+    .report-table thead {{
       background: #f9fafb;
+    }}
+    
+    .report-table th {{
+      padding: 12px 14px;
+      text-align: left;
+      font-weight: 700;
+      color: #374151;
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.5px;
+      border-bottom: 2px solid #e5e7eb;
       position: sticky;
       top: 0;
-      z-index: 1;
+      z-index: 10;
+      background: #f9fafb;
+    }}
+    
+    .report-table th:first-child {{
+      border-top-left-radius: 8px;
+    }}
+    
+    .report-table th:last-child {{
+      border-top-right-radius: 8px;
+    }}
+    
+    .report-table td {{
+      padding: 11px 14px;
+      border-bottom: 1px solid #f3f4f6;
+      vertical-align: middle;
+      color: #374151;
+      font-weight: 500;
+    }}
+    
+    .report-table tbody tr {{
+      transition: background 0.1s ease;
+    }}
+    
+    .report-table tbody tr:hover {{
+      background: #f9fafb;
+    }}
+    
+    .report-table tbody tr:last-child td {{
+      border-bottom: none;
+    }}
+    
+    .report-table tbody tr:last-child {{
+      background: #e5e7eb;
       font-weight: 700;
     }}
-    .report-table tbody tr:nth-child(even) {{
-      background: #fcfcfd;
+    
+    .report-table tbody tr:last-child td {{
+      font-size: 15px;
+      padding: 14px;
+      color: #111827;
     }}
-    .report-table tbody tr:hover {{
-      background: #f3f4f6;
+    
+    .report-table tbody tr:last-child:hover {{
+      background: #e5e7eb;
     }}
+    
     .pos {{
-      color: #15803d;
-      font-weight: 600;
+      color: #059669;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
     }}
+    
+    .pos::before {{
+      content: '▲';
+      font-size: 9px;
+      color: #059669;
+    }}
+    
     .neg {{
-      color: #b91c1c;
-      font-weight: 600;
+      color: #dc2626;
+      font-weight: 700;
     }}
+    
     .neutral {{
-      color: #374151;
+      color: #6b7280;
       font-weight: 600;
     }}
+    
     .footer {{
+      text-align: center;
       color: #6b7280;
       font-size: 12px;
-      margin-top: 4px;
+      margin-top: 28px;
+      padding: 16px;
+      font-weight: 500;
+    }}
+    
+    .footer b {{
+      color: #111827;
+      font-weight: 700;
+    }}
+    
+    @media (max-width: 768px) {{
+      body {{
+        padding: 16px;
+      }}
+      
+      .hero {{
+        padding: 20px;
+      }}
+      
+      .card {{
+        padding: 20px;
+      }}
+      
+      h1 {{
+        font-size: 24px;
+      }}
+      
+      .chips {{
+        gap: 8px;
+      }}
+      
+      .chip {{
+        min-width: 120px;
+        padding: 8px 12px;
+      }}
+      
+      .chip b {{
+        font-size: 18px;
+      }}
+      
+      .report-table {{
+        font-size: 12px;
+      }}
+      
+      .report-table th,
+      .report-table td {{
+        padding: 8px 10px;
+      }}
+      
+      .report-table tbody tr:last-child td {{
+        font-size: 13px;
+      }}
     }}
   </style>
 </head>
 <body>
   <div class="wrap">
-
     <div class="hero">
-      <h1>Investo Valuation Report</h1>
-      <div class="muted">Generated: {asof}</div>
-
-     <div class="chips">
-        <div class="chip"><span>Portfolio value</span><b>{_fmt_chip_money(priced_val_eur, "EUR")}</b></div>
-        <div class="chip"><span>Unrealised P/L</span><b>{_fmt_chip_money(unrealised_eur, "EUR")}</b></div>
-        <div class="chip"><span>Realised P/L</span><b>{_fmt_chip_money(total_realised, "EUR")}</b></div>
-        <div class="chip"><span>Unrealised P/L current year</span><b>{_fmt_chip_money(unrealised_ytd_total, "EUR")}</b></div>
-        <div class="chip"><span>Realised P/L current year</span><b>{_fmt_chip_money(realised_ytd_total, "EUR")}</b></div>
-        <div class="chip"><span>YTD plain return</span><b>{_fmt_pct(simple_return_total)}</b></div>
+      <div class="hero-header">
+        <div class="hero-title">
+          <div class="logo">I</div>
+          <div>
+            <h1>Portfolio Valuation</h1>
+            <div class="muted">Investo — Professional Investment Tracking</div>
+          </div>
+        </div>
+        <div class="timestamp">{asof}</div>
+      </div>
+      
+      <div class="chips">
+        <div class="chip">
+          <span>Portfolio Value</span>
+          <b>{_fmt_chip_money(priced_val_eur, "EUR")}</b>
+        </div>
+        <div class="chip">
+          <span>Unrealised P/L</span>
+          <b>{_fmt_chip_money(unrealised_eur, "EUR")}</b>
+        </div>
+        <div class="chip">
+          <span>Realised P/L</span>
+          <b>{_fmt_chip_money(total_realised, "EUR")}</b>
+        </div>
+        <div class="chip">
+          <span>YTD Unrealised</span>
+          <b>{_fmt_chip_money(unrealised_ytd_total, "EUR")}</b>
+        </div>
+        <div class="chip">
+          <span>YTD Realised</span>
+          <b>{_fmt_chip_money(realised_ytd_total, "EUR")}</b>
+        </div>
+        <div class="chip">
+          <span>YTD Return</span>
+          <b>{_fmt_pct(simple_return_total)}</b>
+        </div>
       </div>
     </div>
 
     <div class="card section">
-      <h2>Valuation summary</h2>
-      <div class="muted">Open positions with latest market valuation and unrealised performance.</div>
+      <div class="section-header">
+        <h2>📊 Open Positions</h2>
+        <div class="muted">Current holdings with market valuation and unrealised performance</div>
+      </div>
       {_table_html(valuation.drop(columns=["Price_Missing"], errors="ignore"))}
     </div>
 
@@ -1362,18 +1631,24 @@ def write_html(
     {realised_trades_block}
 
     <div class="card section">
-      <h2>Realised P/L by year</h2>
-      <div class="muted">Year-by-year sell-side realised outcome.</div>
+      <div class="section-header">
+        <h2>📅 Realised P/L by Year</h2>
+        <div class="muted">Year-by-year sell-side realised outcomes</div>
+      </div>
       {_table_html(realised_by_year)}
     </div>
 
     <div class="card section">
-      <h2>YTD performance</h2>
-      <div class="muted">Includes both plain return for readability and money-weighted return for timing-sensitive analysis.</div>
+      <div class="section-header">
+        <h2>📈 YTD Performance</h2>
+        <div class="muted">Plain return for readability • Money-weighted return for timing-sensitive analysis</div>
+      </div>
       {_table_html(ytd)}
     </div>
 
-    <div class="footer">Generated by <b>portfolio_report.py</b></div>
+    <div class="footer">
+      Generated by <b>portfolio_report.py</b> • InvestingJP System
+    </div>
   </div>
 </body>
 </html>
